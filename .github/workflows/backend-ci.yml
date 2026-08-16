@@ -1,0 +1,20 @@
+name: Backend CI
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install
+        run: pip install -r backend/requirements.txt
+      - name: Lint
+        run: ruff check backend robot
+      - name: Test
+        run: pytest -q

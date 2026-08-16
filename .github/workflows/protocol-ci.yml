@@ -1,0 +1,16 @@
+name: Robot Protocol CI
+on: [push, pull_request]
+jobs:
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Validate JSON
+        run: python -m json.tool robot/protocol/commands.json >/dev/null
+      - name: Install test deps
+        run: pip install -r backend/requirements.txt
+      - name: Test
+        run: pytest -q
