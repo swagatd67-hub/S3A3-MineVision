@@ -30,3 +30,6 @@ Simulator:
 ```bash
 python robot/simulator/simulator.py
 ```
+
+## Day 3.2
+Telemetry is now scoped to inspection missions. Existing rows remain legacy/null until a deliberate backfill.

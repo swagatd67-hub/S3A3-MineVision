@@ -20,5 +20,5 @@ def test_telemetry():
 
 def test_mission_creation():
     r = client.post('/api/v1/missions', json={"robot_id":"PV-TEST-001","objective":"INSPECT_AND_CLEAN"})
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert r.json()['status'] == 'CREATED'
