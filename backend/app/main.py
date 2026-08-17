@@ -5,7 +5,9 @@ from backend.app.api.missions import router as missions_router
 from backend.app.api.analytics import router as analytics_router
 from backend.app.db import init_db
 from backend.app.realtime import telemetry_broadcaster
+from backend.app.api.video import router as video_router
 app=FastAPI(title="PipeVision API",version="0.2.0",description="Robot-agnostic pipeline inspection platform.")
+app.include_router(video_router, prefix="/api/v1")
 @app.on_event("startup")
 def startup(): init_db()
 app.include_router(robots_router,prefix="/api/v1"); app.include_router(telemetry_router,prefix="/api/v1"); app.include_router(missions_router,prefix="/api/v1"); app.include_router(analytics_router,prefix="/api/v1")
