@@ -1,0 +1,13 @@
+path: dataset
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: blockage
+  1: debris
+  2: crack
+  3: corrosion
+  4: sediment
+  5: structural_damage
