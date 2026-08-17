@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from backend.app.services.video.frame_store import (
@@ -28,6 +29,7 @@ def video_health() -> dict:
         "service": "video",
         "status": "ready",
         "supported_sources": ["file", "webcam"],
+        "image_storage": True,
     }
 
 
@@ -46,6 +48,60 @@ def store_frame_metadata(payload: FrameMetadataRequest) -> dict:
 
     return {
         "stored": True,
+        "frame": {
+            "mission_id": metadata.mission_id,
+            "frame_index": metadata.frame_index,
+            "timestamp": metadata.timestamp.isoformat(),
+            "distance_m": metadata.distance_m,
+            "source": metadata.source,
+            "frame_path": metadata.frame_path,
+        },
+    }
+
+
+@router.post("/frames/image", status_code=201)
+async def store_frame_image(
+    mission_id: str = Form(..., min_length=1, max_length=64),
+    frame_index: int = Form(..., ge=0),
+    timestamp: datetime = Form(...),
+    distance_m: float = Form(...),
+    source: str = Form(..., min_length=1, max_length=128),
+    image: UploadFile = File(...),
+) -> dict:
+    content_type = image.content_type or ""
+    if content_type not in {"image/jpeg", "image/png"}:
+        raise HTTPException(
+            status_code=415,
+            detail="only JPEG and PNG images are supported",
+        )
+
+    image_bytes = await image.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="empty_image")
+
+    extension = ".png" if content_type == "image/png" else ".jpg"
+
+    frame_path = frame_store.save_image(
+        mission_id=mission_id,
+        frame_index=frame_index,
+        image_bytes=image_bytes,
+        extension=extension,
+    )
+
+    metadata = frame_store.append(
+        FrameMetadata(
+            mission_id=mission_id,
+            frame_index=frame_index,
+            timestamp=timestamp,
+            distance_m=distance_m,
+            source=source,
+            frame_path=frame_path,
+        )
+    )
+
+    return {
+        "stored": True,
+        "image_bytes": len(image_bytes),
         "frame": {
             "mission_id": metadata.mission_id,
             "frame_index": metadata.frame_index,
@@ -99,3 +155,16 @@ def get_frame_metadata(
         "source": record.source,
         "frame_path": record.frame_path,
     }
+
+
+@router.get("/missions/{mission_id}/frames/{frame_index}/image")
+def get_frame_image(
+    mission_id: str,
+    frame_index: int,
+):
+    path = frame_store.image_path(mission_id, frame_index)
+
+    if path is None or not path.exists():
+        raise HTTPException(status_code=404, detail="frame_image_not_found")
+
+    return FileResponse(path)
