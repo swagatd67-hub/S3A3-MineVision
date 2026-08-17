@@ -4,6 +4,12 @@ from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from backend.app.services.video.detection import (
+    NullDetector,
+    analyze_image,
+    load_detector,
+    result_to_dict,
+)
 from backend.app.services.video.frame_store import (
     FrameMetadata,
     FrameMetadataStore,
@@ -12,6 +18,7 @@ from backend.app.services.video.frame_store import (
 router = APIRouter(prefix="/video", tags=["video"])
 
 frame_store = FrameMetadataStore()
+pipeline_detector = NullDetector()
 
 
 class FrameMetadataRequest(BaseModel):
@@ -30,6 +37,7 @@ def video_health() -> dict:
         "status": "ready",
         "supported_sources": ["file", "webcam"],
         "image_storage": True,
+        "detection_pipeline": True,
     }
 
 
@@ -69,6 +77,7 @@ async def store_frame_image(
     image: UploadFile = File(...),
 ) -> dict:
     content_type = image.content_type or ""
+
     if content_type not in {"image/jpeg", "image/png"}:
         raise HTTPException(
             status_code=415,
@@ -76,8 +85,12 @@ async def store_frame_image(
         )
 
     image_bytes = await image.read()
+
     if not image_bytes:
-        raise HTTPException(status_code=400, detail="empty_image")
+        raise HTTPException(
+            status_code=400,
+            detail="empty_image",
+        )
 
     extension = ".png" if content_type == "image/png" else ".jpg"
 
@@ -145,10 +158,13 @@ def get_frame_metadata(
     record = frame_store.get(mission_id, frame_index)
 
     if record is None:
-        raise HTTPException(status_code=404, detail="frame_not_found")
+        raise HTTPException(
+            status_code=404,
+            detail="frame_not_found",
+        )
 
     return {
-        "mission_id": record.mission_id,
+        "mission_id": mission_id,
         "frame_index": record.frame_index,
         "timestamp": record.timestamp.isoformat(),
         "distance_m": record.distance_m,
@@ -162,9 +178,68 @@ def get_frame_image(
     mission_id: str,
     frame_index: int,
 ):
-    path = frame_store.image_path(mission_id, frame_index)
+    path = frame_store.image_path(
+        mission_id,
+        frame_index,
+    )
 
     if path is None or not path.exists():
-        raise HTTPException(status_code=404, detail="frame_image_not_found")
+        raise HTTPException(
+            status_code=404,
+            detail="frame_image_not_found",
+        )
 
     return FileResponse(path)
+
+
+@router.post("/missions/{mission_id}/frames/{frame_index}/detect")
+def detect_frame(
+    mission_id: str,
+    frame_index: int,
+    model: str = Query(default="null"),
+    confidence: float = Query(default=0.25, ge=0.0, le=1.0),
+) -> dict:
+    record = frame_store.get(
+        mission_id,
+        frame_index,
+    )
+
+    if record is None or not record.frame_path:
+        raise HTTPException(
+            status_code=404,
+            detail="frame_not_found",
+        )
+
+    image_path = frame_store.image_path(
+        mission_id,
+        frame_index,
+    )
+
+    if image_path is None or not image_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="frame_image_not_found",
+        )
+
+    detector = (
+        pipeline_detector
+        if model == "null"
+        else load_detector(
+            model,
+            confidence_threshold=confidence,
+        )
+    )
+
+    result = analyze_image(
+        image_path,
+        detector,
+    )
+
+    return {
+        "mission_id": mission_id,
+        "frame_index": frame_index,
+        "timestamp": record.timestamp.isoformat(),
+        "distance_m": record.distance_m,
+        "source": record.source,
+        **result_to_dict(result),
+    }
