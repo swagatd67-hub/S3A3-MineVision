@@ -16,3 +16,26 @@ build/
 .vscode/
 .idea/
 backend/test.db
+# Local Python environment
+.venv/
+
+# Environment files
+.env
+.env.*
+
+# Frontend dependencies/build
+frontend/node_modules/
+frontend/dist/
+
+# Local datasets
+approved-data/
+
+# ML model files
+*.pt
+*.pth
+*.onnx
+*.safetensors
+
+# Temporary files
+*.tmp
+*.part
