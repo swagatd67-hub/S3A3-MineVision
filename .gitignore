@@ -39,3 +39,6 @@ approved-data/
 # Temporary files
 *.tmp
 *.part
+
+# Local video/frame storage
+video/storage/
