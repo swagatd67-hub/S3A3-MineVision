@@ -30,6 +30,8 @@ jobs:
         run: |
           pip install -r backend/requirements.txt
           pip install -r requirements-ml.txt --extra-index-url https://download.pytorch.org/whl/cu126
+      - name: Init DB Schema
+        run: python -c "import backend.app.models; from backend.app.db import init_db; init_db()"
       - name: Lint
         run: ruff check backend robot
       - name: Test
