@@ -13,6 +13,11 @@ from backend.app.services.video.sewer_classifier import (
     ClassDecision,
     SewerMLInferenceEngine,
     SewerMLResult,
+    analyze_sewer_frame,
+    get_default_checkpoint_path,
+    get_default_thresholds_path,
+    get_sewer_classifier_engine,
+    reset_sewer_classifier_engine,
 )
 from backend.app.services.video.sewer_dataset import DEFECT_CLASSES
 from backend.app.services.video.sewer_model import (
@@ -206,3 +211,60 @@ def test_missing_and_malformed_thresholds_handling(tmp_path: Path) -> None:
             thresholds_path=malformed_json,
             device="cpu",
         )
+
+
+def test_singleton_engine_caching_and_reset(
+    dummy_checkpoint_and_thresholds: tuple[Path, Path],
+) -> None:
+    checkpoint_path, thresholds_path = dummy_checkpoint_and_thresholds
+    reset_sewer_classifier_engine()
+
+    engine1 = get_sewer_classifier_engine(
+        checkpoint_path=checkpoint_path,
+        thresholds_path=thresholds_path,
+        device="cpu",
+    )
+    engine2 = get_sewer_classifier_engine()
+
+    assert engine1 is engine2
+
+    reset_sewer_classifier_engine()
+    engine3 = get_sewer_classifier_engine(
+        checkpoint_path=checkpoint_path,
+        thresholds_path=thresholds_path,
+        device="cpu",
+    )
+
+    assert engine3 is not engine1
+    reset_sewer_classifier_engine()
+
+
+def test_environment_variable_path_resolution(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    custom_ckpt = tmp_path / "env_ckpt.pt"
+    custom_thresh = tmp_path / "env_thresh.json"
+
+    monkeypatch.setenv("SEWER_CHECKPOINT_PATH", str(custom_ckpt))
+    monkeypatch.setenv("SEWER_THRESHOLDS_PATH", str(custom_thresh))
+
+    assert get_default_checkpoint_path() == custom_ckpt
+    assert get_default_thresholds_path() == custom_thresh
+
+
+def test_analyze_sewer_frame_service_function(
+    dummy_checkpoint_and_thresholds: tuple[Path, Path],
+) -> None:
+    checkpoint_path, thresholds_path = dummy_checkpoint_and_thresholds
+    engine = SewerMLInferenceEngine(
+        checkpoint_path=checkpoint_path,
+        thresholds_path=thresholds_path,
+        device="cpu",
+    )
+
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    result = analyze_sewer_frame(frame, engine=engine)
+
+    assert isinstance(result, SewerMLResult)
+    assert len(result.decisions) == 17

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 import cv2
@@ -21,6 +23,66 @@ from backend.app.services.video.sewer_model import (
 DEFAULT_CHECKPOINT_PATH = Path("experiments/sewer/E009/best.pt")
 DEFAULT_THRESHOLDS_PATH = Path("experiments/sewer/E009/thresholds.json")
 DEFAULT_MODEL_VERSION = "sewer-ml-e009"
+
+_ENGINE_LOCK = Lock()
+_SHARED_ENGINE: SewerMLInferenceEngine | None = None
+
+
+def get_default_checkpoint_path() -> Path:
+    env_path = os.getenv("SEWER_CHECKPOINT_PATH")
+    return Path(env_path) if env_path else DEFAULT_CHECKPOINT_PATH
+
+
+def get_default_thresholds_path() -> Path:
+    env_path = os.getenv("SEWER_THRESHOLDS_PATH")
+    return Path(env_path) if env_path else DEFAULT_THRESHOLDS_PATH
+
+
+def get_sewer_classifier_engine(
+    checkpoint_path: str | Path | None = None,
+    thresholds_path: str | Path | None = None,
+    device: str | torch.device | None = None,
+    force_reload: bool = False,
+) -> SewerMLInferenceEngine:
+    """Thread-safe singleton getter for SewerMLInferenceEngine."""
+    global _SHARED_ENGINE
+
+    with _ENGINE_LOCK:
+        if _SHARED_ENGINE is None or force_reload:
+            ckpt_path = (
+                Path(checkpoint_path)
+                if checkpoint_path is not None
+                else get_default_checkpoint_path()
+            )
+            thresh_path = (
+                Path(thresholds_path)
+                if thresholds_path is not None
+                else get_default_thresholds_path()
+            )
+
+            _SHARED_ENGINE = SewerMLInferenceEngine(
+                checkpoint_path=ckpt_path,
+                thresholds_path=thresh_path,
+                device=device,
+            )
+
+        return _SHARED_ENGINE
+
+
+def reset_sewer_classifier_engine() -> None:
+    """Reset cached singleton engine (used for testing or reload)."""
+    global _SHARED_ENGINE
+    with _ENGINE_LOCK:
+        _SHARED_ENGINE = None
+
+
+def analyze_sewer_frame(
+    image: np.ndarray,
+    engine: SewerMLInferenceEngine | None = None,
+) -> SewerMLResult:
+    """Service-level function to run Sewer-ML inference on an OpenCV BGR frame."""
+    active_engine = engine or get_sewer_classifier_engine()
+    return active_engine.predict(image)
 
 
 @dataclass(frozen=True)
