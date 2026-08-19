@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────
+# PipeVision  —  ML / Training / Experimentation dependencies
+# ─────────────────────────────────────────────────────────────
+# Install with:
+#   pip install -r requirements-ml.txt
+#
+# These packages are required by scripts/ (training, evaluation,
+# diagnostics, data splitting) and by backend/app/services/video/
+# (sewer_model, sewer_dataset, detection, preprocessing).
+#
+# NOTE: torch and torchvision must match the local CUDA toolkit.
+# The versions below were verified against CUDA 12.6 on the
+# current dev machine.  Install from the PyTorch index:
+#
+#   pip install torch==2.8.0+cu126 torchvision==0.23.0+cu126 \
+#       --index-url https://download.pytorch.org/whl/cu126
+#
+# If you are on CPU-only, substitute the appropriate index URL
+# from https://pytorch.org/get-started/locally/
+# ─────────────────────────────────────────────────────────────
+
+# --- Deep learning --------------------------------------------------------
+torch==2.8.0+cu126
+torchvision==0.23.0+cu126
+
+# --- Computer vision ------------------------------------------------------
+opencv-python>=5.0,<6
+Pillow>=11,<12
+
+# --- Classical ML (metrics in evaluation / training scripts) ---------------
+scikit-learn>=1.9,<2
+
+# --- Numeric --------------------------------------------------------------
+numpy>=2.0,<3
+
+# --- Object detection (YOLO, lazy-loaded in detection.py) -----------------
+ultralytics>=8,<9

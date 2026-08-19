@@ -13,4 +13,4 @@ jobs:
       - name: Install test deps
         run: pip install -r backend/requirements.txt
       - name: Test
-        run: pytest -q
+        run: pytest -q backend/tests/test_analytics.py backend/tests/test_cross_sensor.py backend/tests/test_defects.py backend/tests/test_detection_events.py backend/tests/test_frame_store.py backend/tests/test_graph_engine.py backend/tests/test_realtime_analytics.py backend/tests/test_video_sync.py

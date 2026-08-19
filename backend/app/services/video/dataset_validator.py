@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 import cv2
-
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 CLASS_NAMES = (
@@ -41,8 +40,7 @@ def _iter_images(root: Path) -> Iterable[Path]:
     if not root.exists():
         return []
     return sorted(
-        p for p in root.rglob("*")
-        if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
+        p for p in root.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES
     )
 
 
@@ -70,36 +68,48 @@ def _parse_labels(path: Path, split: str) -> list[DatasetIssue]:
             x, y, w, h = map(float, parts[1:])
         except ValueError:
             issues.append(
-                DatasetIssue(split, str(path), f"line {number}: non-numeric label values")
+                DatasetIssue(
+                    split, str(path), f"line {number}: non-numeric label values"
+                )
             )
             continue
 
         if not 0 <= class_id < len(CLASS_NAMES):
             issues.append(
                 DatasetIssue(
-                    split, str(path),
-                    f"line {number}: class id {class_id} outside 0..{len(CLASS_NAMES)-1}",
+                    split,
+                    str(path),
+                    f"line {number}: class id {class_id} outside 0..{len(CLASS_NAMES) - 1}",
                 )
             )
 
-        for name, value in (("x_center", x), ("y_center", y), ("width", w), ("height", h)):
+        for name, value in (
+            ("x_center", x),
+            ("y_center", y),
+            ("width", w),
+            ("height", h),
+        ):
             if not 0.0 <= value <= 1.0:
                 issues.append(
                     DatasetIssue(
-                        split, str(path),
+                        split,
+                        str(path),
                         f"line {number}: {name}={value} must be between 0 and 1",
                     )
                 )
 
         if w <= 0 or h <= 0:
             issues.append(
-                DatasetIssue(split, str(path), f"line {number}: width and height must be > 0")
+                DatasetIssue(
+                    split, str(path), f"line {number}: width and height must be > 0"
+                )
             )
 
         if x - w / 2 < 0 or x + w / 2 > 1 or y - h / 2 < 0 or y + h / 2 > 1:
             issues.append(
                 DatasetIssue(
-                    split, str(path),
+                    split,
+                    str(path),
                     f"line {number}: bounding box extends outside normalized image bounds",
                 )
             )

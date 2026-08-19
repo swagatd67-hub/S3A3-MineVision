@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Iterable, Sequence
 
 from backend.app.services.video.defects import (
-    DetectionDisposition,
     DefectClass,
     DefectDetection,
+    DetectionDisposition,
     DetectionEvent,
     filter_defect_candidates,
     validate_confidence,
@@ -72,10 +72,7 @@ def build_detection_events(
     min_confidence: float = 0.5,
     preprocessing_usable: bool = True,
 ) -> list[DetectionEvent]:
-    defects = [
-        raw_to_defect(item)
-        for item in raw_detections
-    ]
+    defects = [raw_to_defect(item) for item in raw_detections]
 
     candidates = filter_defect_candidates(
         defects,
@@ -102,9 +99,7 @@ def raw_detections_from_result(
     confidences: Sequence[float],
     boxes: Sequence[tuple[float, float, float, float]],
 ) -> list[RawDetection]:
-    if not (
-        len(labels) == len(confidences) == len(boxes)
-    ):
+    if not (len(labels) == len(confidences) == len(boxes)):
         raise ValueError("labels, confidences and boxes must have equal lengths")
 
     return [

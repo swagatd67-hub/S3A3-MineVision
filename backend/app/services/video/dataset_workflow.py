@@ -6,7 +6,6 @@ import random
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 from backend.app.services.video.dataset_validator import (
     CLASS_NAMES,
@@ -170,9 +169,7 @@ def class_distribution(
         label_root = root / "labels" / split
 
         for label_file in label_root.glob("*.txt"):
-            for raw in label_file.read_text(
-                encoding="utf-8"
-            ).splitlines():
+            for raw in label_file.read_text(encoding="utf-8").splitlines():
                 line = raw.strip()
 
                 if not line:
@@ -235,11 +232,7 @@ def save_manifest(
     output: str | Path | None = None,
 ) -> Path:
     root = Path(dataset_dir).resolve()
-    output_path = (
-        Path(output)
-        if output is not None
-        else root / "manifest.json"
-    )
+    output_path = Path(output) if output is not None else root / "manifest.json"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(

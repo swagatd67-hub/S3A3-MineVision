@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from bisect import bisect_left
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True)

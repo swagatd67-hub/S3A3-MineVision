@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -207,9 +208,7 @@ def _merge_adjacent_events(
 
         if same_type and close:
             last["distance_end_m"] = event["distance_end_m"]
-            last["evidence"] = sorted(
-                set(last["evidence"]) | set(event["evidence"])
-            )
+            last["evidence"] = sorted(set(last["evidence"]) | set(event["evidence"]))
             continue
 
         merged.append(event.copy())

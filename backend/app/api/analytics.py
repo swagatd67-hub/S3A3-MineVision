@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,9 +11,12 @@ from backend.app.services.cross_sensor import build_cross_sensor_events
 from backend.app.services.graph_engine import build_distance_indexed_charts
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
-def _mission_rows(mission_id: str, db: Session) -> tuple[Mission | None, list[Telemetry]]:
+def _mission_rows(
+    mission_id: str, db: Session
+) -> tuple[Mission | None, list[Telemetry]]:
     mission = db.get(Mission, mission_id)
 
     rows = db.scalars(
@@ -26,8 +31,8 @@ def _mission_rows(mission_id: str, db: Session) -> tuple[Mission | None, list[Te
 @router.get("/telemetry/{robot_id}")
 def get_telemetry_analytics(
     robot_id: str,
+    db: DatabaseSession,
     limit: int = Query(default=500, ge=10, le=5000),
-    db: Session = Depends(get_db),
 ) -> dict:
     rows = db.scalars(
         select(Telemetry)
@@ -42,7 +47,7 @@ def get_telemetry_analytics(
 
 
 @router.get("/missions/{mission_id}")
-def get_mission_analytics(mission_id: str, db: Session = Depends(get_db)) -> dict:
+def get_mission_analytics(mission_id: str, db: DatabaseSession) -> dict:
     mission, rows = _mission_rows(mission_id, db)
 
     if mission is None:
@@ -63,8 +68,8 @@ def get_mission_analytics(mission_id: str, db: Session = Depends(get_db)) -> dic
 @router.get("/missions/{mission_id}/charts")
 def get_mission_charts(
     mission_id: str,
+    db: DatabaseSession,
     include_timeline: bool = Query(default=True),
-    db: Session = Depends(get_db),
 ) -> dict:
     mission, rows = _mission_rows(mission_id, db)
 
@@ -96,8 +101,8 @@ def get_mission_charts(
 @router.get("/missions/{mission_id}/events")
 def get_mission_events(
     mission_id: str,
+    db: DatabaseSession,
     min_severity: str = Query(default="info"),
-    db: Session = Depends(get_db),
 ) -> dict:
     mission, rows = _mission_rows(mission_id, db)
 

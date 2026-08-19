@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -69,12 +70,12 @@ def store_frame_metadata(payload: FrameMetadataRequest) -> dict:
 
 @router.post("/frames/image", status_code=201)
 async def store_frame_image(
-    mission_id: str = Form(..., min_length=1, max_length=64),
-    frame_index: int = Form(..., ge=0),
-    timestamp: datetime = Form(...),
-    distance_m: float = Form(...),
-    source: str = Form(..., min_length=1, max_length=128),
-    image: UploadFile = File(...),
+    mission_id: Annotated[str, Form(min_length=1, max_length=64)],
+    frame_index: Annotated[int, Form(ge=0)],
+    timestamp: Annotated[datetime, Form()],
+    distance_m: Annotated[float, Form()],
+    source: Annotated[str, Form(min_length=1, max_length=128)],
+    image: Annotated[UploadFile, File()],
 ) -> dict:
     content_type = image.content_type or ""
 

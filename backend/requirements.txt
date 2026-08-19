@@ -1,12 +1,25 @@
+# ─────────────────────────────────────────────────────────────
+# PipeVision  —  Backend runtime + dev/test dependencies
+# ─────────────────────────────────────────────────────────────
+# For ML / training / computer-vision packages see:
+#   requirements-ml.txt  (project root)
+# ─────────────────────────────────────────────────────────────
+
+# --- Web framework --------------------------------------------------------
 fastapi>=0.115,<1
 uvicorn[standard]>=0.34,<1
 pydantic>=2.10,<3
+python-multipart>=0.0.20
+
+# --- Database -------------------------------------------------------------
 sqlalchemy>=2.0,<3
 psycopg[binary]>=3.2,<4
+
+# --- Configuration --------------------------------------------------------
 python-dotenv>=1.0,<2
+
+# --- Dev / test tools (not needed in production) --------------------------
 pytest>=8,<9
 ruff>=0.11,<1
 httpx>=0.28,<1
-
 websocket-client>=1.8,<2
-python-multipart>=0.0.20

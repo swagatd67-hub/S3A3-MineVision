@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,7 @@ from backend.app.models import Mission, Robot
 from backend.app.schemas.mission import MissionCreate
 
 router = APIRouter(prefix="/missions", tags=["missions"])
+DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
 def mission_to_dict(mission: Mission) -> dict:
@@ -24,7 +26,7 @@ def mission_to_dict(mission: Mission) -> dict:
 @router.post("", status_code=201)
 def create_mission(
     request: MissionCreate,
-    db: Session = Depends(get_db),
+    db: DatabaseSession,
 ) -> dict:
     robot = db.get(Robot, request.robot_id)
     if robot is None:
@@ -44,7 +46,7 @@ def create_mission(
 
 
 @router.post("/{mission_id}/start")
-def start_mission(mission_id: str, db: Session = Depends(get_db)) -> dict:
+def start_mission(mission_id: str, db: DatabaseSession) -> dict:
     mission = db.get(Mission, mission_id)
     if mission is None:
         raise HTTPException(status_code=404, detail="Mission not found")
@@ -55,7 +57,7 @@ def start_mission(mission_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.post("/{mission_id}/complete")
-def complete_mission(mission_id: str, db: Session = Depends(get_db)) -> dict:
+def complete_mission(mission_id: str, db: DatabaseSession) -> dict:
     mission = db.get(Mission, mission_id)
     if mission is None:
         raise HTTPException(status_code=404, detail="Mission not found")
@@ -66,7 +68,7 @@ def complete_mission(mission_id: str, db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/{mission_id}")
-def get_mission(mission_id: str, db: Session = Depends(get_db)) -> dict:
+def get_mission(mission_id: str, db: DatabaseSession) -> dict:
     mission = db.get(Mission, mission_id)
     if mission is None:
         raise HTTPException(status_code=404, detail="Mission not found")

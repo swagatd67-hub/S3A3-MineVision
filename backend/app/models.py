@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db import Base
@@ -17,7 +17,9 @@ class Robot(Base):
     name: Mapped[str] = mapped_column(String(100))
     firmware_version: Mapped[str] = mapped_column(String(64), default="dev")
     capabilities: Mapped[list] = mapped_column(JSON, default=list)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
 
 
 class Mission(Base):
@@ -27,7 +29,9 @@ class Mission(Base):
     robot_id: Mapped[str] = mapped_column(String(64), index=True)
     objective: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(32), default="CREATED")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Iterator
 
 import cv2
 import numpy as np
+
 
 @dataclass(frozen=True)
 class VideoFrame:
@@ -22,9 +23,7 @@ class VideoSource:
         self.capture = cv2.VideoCapture(source)
 
         if not self.capture.isOpened():
-            raise RuntimeError(
-                f"Unable to open video source: {self.source}"
-            )
+            raise RuntimeError(f"Unable to open video source: {self.source}")
 
     @property
     def fps(self) -> float:
