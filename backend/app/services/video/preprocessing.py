@@ -55,7 +55,7 @@ def preprocess_frame(
 
     if config.target_width > 0 and original_width > config.target_width:
         scale = config.target_width / original_width
-        target_height = max(1, int(round(original_height * scale)))
+        target_height = max(1, round(original_height * scale))
         working = cv2.resize(
             working,
             (config.target_width, target_height),

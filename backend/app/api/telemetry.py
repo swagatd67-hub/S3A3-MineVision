@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Annotated
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
@@ -11,6 +12,7 @@ from backend.app.schemas.telemetry import TelemetryPacket
 from backend.app.services.realtime_analytics import build_live_analytics_update
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
+DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
 def to_packet(row: Telemetry) -> TelemetryPacket:
@@ -31,7 +33,7 @@ def to_packet(row: Telemetry) -> TelemetryPacket:
 @router.post("", response_model=TelemetryPacket)
 async def ingest_telemetry(
     packet: TelemetryPacket,
-    db: Session = Depends(get_db),
+    db: DatabaseSession,
 ) -> TelemetryPacket:
     timestamp = packet.timestamp or datetime.now(timezone.utc)
 
@@ -73,10 +75,11 @@ async def ingest_telemetry(
 
     return normalized
 
+
 @router.get("/mission/{mission_id}", response_model=list[TelemetryPacket])
 def get_mission_telemetry(
     mission_id: str,
-    db: Session = Depends(get_db),
+    db: DatabaseSession,
 ) -> list[TelemetryPacket]:
     rows = db.scalars(
         select(Telemetry)
@@ -85,10 +88,12 @@ def get_mission_telemetry(
     ).all()
 
     return [to_packet(row) for row in rows]
+
+
 @router.get("/{robot_id}", response_model=list[TelemetryPacket])
 def get_robot_telemetry(
     robot_id: str,
-    db: Session = Depends(get_db),
+    db: DatabaseSession,
 ) -> list[TelemetryPacket]:
     rows = db.scalars(
         select(Telemetry)

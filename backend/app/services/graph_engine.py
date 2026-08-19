@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 METRIC_DEFINITIONS: dict[str, dict[str, str]] = {
     "body_diameter_mm": {"label": "Body Diameter", "unit": "mm"},
@@ -18,7 +19,7 @@ METRIC_DEFINITIONS: dict[str, dict[str, str]] = {
 
 def build_distance_indexed_charts(rows: Iterable[Any]) -> dict[str, Any]:
     """Build frontend-ready distance-indexed chart data for one mission."""
-    rows = sorted(list(rows), key=lambda r: r.timestamp)
+    rows = sorted(rows, key=lambda r: r.timestamp)
     charts: dict[str, dict[str, Any]] = {}
 
     for metric, definition in METRIC_DEFINITIONS.items():
@@ -31,11 +32,13 @@ def build_distance_indexed_charts(rows: Iterable[Any]) -> dict[str, Any]:
             if distance is None or value is None:
                 continue
 
-            points.append({
-                "distance_m": distance,
-                "timestamp": row.timestamp,
-                "value": value,
-            })
+            points.append(
+                {
+                    "distance_m": distance,
+                    "timestamp": row.timestamp,
+                    "value": value,
+                }
+            )
 
         if points:
             charts[metric] = {
@@ -85,6 +88,7 @@ def _extract_metric(row: Any, metric: str) -> float | None:
         return _to_float((row.imu or {}).get("gz"))
 
     return None
+
 
 def _to_float(value: Any) -> float | None:
     if value is None:

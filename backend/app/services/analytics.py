@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from math import sqrt
-from typing import Any, Iterable
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -64,9 +65,15 @@ def _explain(name: str, values: list[float], unit: str) -> dict[str, Any]:
     elif name == "pressure_body_kpa" and abs(delta) > max(abs(values[0]) * 0.20, 10.0):
         severity = "warning"
         recommendation = "Inspect the morphology/pressure-control system and verify the target pressure."
-    elif name == "turbidity_ntu" and len(values) > 2 and max(values) > 2 * max(sum(values) / len(values), 1.0):
+    elif (
+        name == "turbidity_ntu"
+        and len(values) > 2
+        and max(values) > 2 * max(sum(values) / len(values), 1.0)
+    ):
         severity = "warning"
-        recommendation = "Review the corresponding video/map segment for sediment or obstruction."
+        recommendation = (
+            "Review the corresponding video/map segment for sediment or obstruction."
+        )
 
     return {
         "metric": name,
@@ -98,11 +105,13 @@ def _zscore_anomalies(points: list[Point]) -> list[dict[str, Any]]:
     for point in points:
         z = (point.value - mean) / std
         if abs(z) >= 3:
-            anomalies.append({
-                "timestamp": point.timestamp,
-                "value": point.value,
-                "z_score": round(z, 3),
-            })
+            anomalies.append(
+                {
+                    "timestamp": point.timestamp,
+                    "value": point.value,
+                    "z_score": round(z, 3),
+                }
+            )
     return anomalies
 
 
@@ -137,13 +146,31 @@ def build_telemetry_analytics(rows: Iterable[Any]) -> dict[str, Any]:
         "distance_m": (make_points(lambda r: r.distance_m), "m"),
         "body_diameter_mm": (make_points(lambda r: r.body_diameter_mm), "mm"),
         "battery_percent": (make_points(lambda r: r.battery_percent), "%"),
-        "pressure_body_kpa": (make_points(lambda r: (r.pressure or {}).get("body_kpa")), "kPa"),
-        "pressure_front_anchor_kpa": (make_points(lambda r: (r.pressure or {}).get("front_anchor_kpa")), "kPa"),
-        "pressure_rear_anchor_kpa": (make_points(lambda r: (r.pressure or {}).get("rear_anchor_kpa")), "kPa"),
-        "water_temperature_c": (make_points(lambda r: (r.water or {}).get("temperature_c")), "°C"),
+        "pressure_body_kpa": (
+            make_points(lambda r: (r.pressure or {}).get("body_kpa")),
+            "kPa",
+        ),
+        "pressure_front_anchor_kpa": (
+            make_points(lambda r: (r.pressure or {}).get("front_anchor_kpa")),
+            "kPa",
+        ),
+        "pressure_rear_anchor_kpa": (
+            make_points(lambda r: (r.pressure or {}).get("rear_anchor_kpa")),
+            "kPa",
+        ),
+        "water_temperature_c": (
+            make_points(lambda r: (r.water or {}).get("temperature_c")),
+            "°C",
+        ),
         "ph": (make_points(lambda r: (r.water or {}).get("ph")), "pH"),
-        "conductivity_ms_cm": (make_points(lambda r: (r.water or {}).get("conductivity_ms_cm")), "mS/cm"),
-        "turbidity_ntu": (make_points(lambda r: (r.water or {}).get("turbidity_ntu")), "NTU"),
+        "conductivity_ms_cm": (
+            make_points(lambda r: (r.water or {}).get("conductivity_ms_cm")),
+            "mS/cm",
+        ),
+        "turbidity_ntu": (
+            make_points(lambda r: (r.water or {}).get("turbidity_ntu")),
+            "NTU",
+        ),
         "gyro_z": (make_points(lambda r: (r.imu or {}).get("gz")), "rad/s"),
     }
 
@@ -152,10 +179,7 @@ def build_telemetry_analytics(rows: Iterable[Any]) -> dict[str, Any]:
     anomalies: dict[str, list[dict[str, Any]]] = {}
 
     for name, (points, unit) in series_map.items():
-        series[name] = [
-            {"timestamp": p.timestamp, "value": p.value}
-            for p in points
-        ]
+        series[name] = [{"timestamp": p.timestamp, "value": p.value} for p in points]
         if points:
             explanations.append(_explain(name, [p.value for p in points], unit))
             found = _zscore_anomalies(points)
@@ -176,7 +200,9 @@ def build_telemetry_analytics(rows: Iterable[Any]) -> dict[str, Any]:
         "distance": {
             "start_m": start_distance,
             "end_m": end_distance,
-            "change_m": (end_distance - start_distance) if start_distance is not None and end_distance is not None else 0.0,
+            "change_m": (end_distance - start_distance)
+            if start_distance is not None and end_distance is not None
+            else 0.0,
         },
         "latest_state": last.state,
         "series": series,

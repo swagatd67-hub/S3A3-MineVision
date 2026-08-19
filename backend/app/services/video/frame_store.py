@@ -30,8 +30,7 @@ class FrameMetadataStore:
         value = value.strip()
 
         safe = "".join(
-            char if char.isalnum() or char in {"-", "_"} else "_"
-            for char in value
+            char if char.isalnum() or char in {"-", "_"} else "_" for char in value
         )
 
         return safe.strip("_") or "unknown"
@@ -56,10 +55,7 @@ class FrameMetadataStore:
         if safe_ext not in {".jpg", ".jpeg", ".png"}:
             raise ValueError("unsupported image extension")
 
-        return (
-            self._mission_dir(mission_id)
-            / f"frame-{frame_index:06d}{safe_ext}"
-        )
+        return self._mission_dir(mission_id) / f"frame-{frame_index:06d}{safe_ext}"
 
     def save_image(
         self,
@@ -98,18 +94,20 @@ class FrameMetadataStore:
             "frame_path": metadata.frame_path,
         }
 
-        with self._lock:
-            with self._metadata_path(metadata.mission_id).open(
+        with (
+            self._lock,
+            self._metadata_path(metadata.mission_id).open(
                 "a",
                 encoding="utf-8",
-            ) as handle:
-                handle.write(
-                    json.dumps(
-                        payload,
-                        separators=(",", ":"),
-                    )
-                    + "\n"
+            ) as handle,
+        ):
+            handle.write(
+                json.dumps(
+                    payload,
+                    separators=(",", ":"),
                 )
+                + "\n"
+            )
 
         return metadata
 
@@ -137,9 +135,7 @@ class FrameMetadataStore:
                     FrameMetadata(
                         mission_id=str(payload["mission_id"]),
                         frame_index=int(payload["frame_index"]),
-                        timestamp=datetime.fromisoformat(
-                            str(payload["timestamp"])
-                        ),
+                        timestamp=datetime.fromisoformat(str(payload["timestamp"])),
                         distance_m=float(payload["distance_m"]),
                         source=str(payload["source"]),
                         frame_path=(
@@ -150,7 +146,7 @@ class FrameMetadataStore:
                     )
                 )
 
-        return records[-max(1, limit):]
+        return records[-max(1, limit) :]
 
     def get(
         self,
@@ -189,8 +185,6 @@ class FrameMetadataStore:
         try:
             path.relative_to(self.root)
         except ValueError as exc:
-            raise ValueError(
-                "frame path escapes storage root"
-            ) from exc
+            raise ValueError("frame path escapes storage root") from exc
 
         return path

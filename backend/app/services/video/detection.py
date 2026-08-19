@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, Sequence
+from typing import Any, Protocol
 
 import cv2
 import numpy as np
@@ -37,8 +38,7 @@ class DetectionResult:
 
 
 class Detector(Protocol):
-    def predict(self, image: np.ndarray) -> DetectionResult:
-        ...
+    def predict(self, image: np.ndarray) -> DetectionResult: ...
 
 
 class NullDetector:
@@ -178,10 +178,7 @@ def result_to_dict(result: DetectionResult) -> dict[str, Any]:
         "image_width": result.image_width,
         "image_height": result.image_height,
         "inference_ms": result.inference_ms,
-        "detections": [
-            detection_to_dict(item)
-            for item in result.detections
-        ],
+        "detections": [detection_to_dict(item) for item in result.detections],
     }
 
 
@@ -190,8 +187,4 @@ def filter_detections(
     *,
     min_confidence: float = 0.25,
 ) -> list[Detection]:
-    return [
-        item
-        for item in detections
-        if item.confidence >= min_confidence
-    ]
+    return [item for item in detections if item.confidence >= min_confidence]
