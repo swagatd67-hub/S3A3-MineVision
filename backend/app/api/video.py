@@ -8,12 +8,16 @@ from pydantic import BaseModel, Field
 from backend.app.services.video.detection import (
     NullDetector,
     analyze_image,
+    analyze_image_with_sewer_ml,
     load_detector,
     result_to_dict,
 )
 from backend.app.services.video.frame_store import (
     FrameMetadata,
     FrameMetadataStore,
+)
+from backend.app.services.video.sewer_classifier import (
+    get_sewer_classifier_engine,
 )
 
 router = APIRouter(prefix="/video", tags=["video"])
@@ -243,4 +247,47 @@ def detect_frame(
         "distance_m": record.distance_m,
         "source": record.source,
         **result_to_dict(result),
+    }
+
+
+@router.post("/missions/{mission_id}/frames/{frame_index}/classify_sewer")
+def classify_sewer_frame(
+    mission_id: str,
+    frame_index: int,
+) -> dict:
+    record = frame_store.get(
+        mission_id,
+        frame_index,
+    )
+
+    if record is None or not record.frame_path:
+        raise HTTPException(
+            status_code=404,
+            detail="frame_not_found",
+        )
+
+    image_path = frame_store.image_path(
+        mission_id,
+        frame_index,
+    )
+
+    if image_path is None or not image_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="frame_image_not_found",
+        )
+
+    engine = get_sewer_classifier_engine()
+    result = analyze_image_with_sewer_ml(
+        image_path,
+        engine=engine,
+    )
+
+    return {
+        "mission_id": mission_id,
+        "frame_index": frame_index,
+        "timestamp": record.timestamp.isoformat(),
+        "distance_m": record.distance_m,
+        "source": record.source,
+        **result.to_dict(),
     }
