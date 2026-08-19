@@ -3,10 +3,16 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import cv2
 import numpy as np
+
+if TYPE_CHECKING:
+    from backend.app.services.video.sewer_classifier import (
+        SewerMLInferenceEngine,
+        SewerMLResult,
+    )
 
 
 @dataclass(frozen=True)
@@ -188,3 +194,26 @@ def filter_detections(
     min_confidence: float = 0.25,
 ) -> list[Detection]:
     return [item for item in detections if item.confidence >= min_confidence]
+
+
+def analyze_frame_with_sewer_ml(
+    image: np.ndarray,
+    engine: SewerMLInferenceEngine | None = None,
+) -> SewerMLResult:
+    """Run Sewer-ML multi-label classification on an OpenCV BGR frame array."""
+    from backend.app.services.video.sewer_classifier import analyze_sewer_frame
+
+    return analyze_sewer_frame(image, engine=engine)
+
+
+def analyze_image_with_sewer_ml(
+    image_path: str | Path,
+    engine: SewerMLInferenceEngine | None = None,
+) -> SewerMLResult:
+    """Read an image file from disk and run Sewer-ML multi-label classification."""
+    image = cv2.imread(str(image_path))
+
+    if image is None:
+        raise FileNotFoundError(f"Unable to read image: {image_path}")
+
+    return analyze_frame_with_sewer_ml(image, engine=engine)
