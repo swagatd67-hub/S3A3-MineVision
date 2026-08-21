@@ -204,6 +204,7 @@ def fuse_observations(
             f"Distance conflict {distance_conflict:.3f}m exceeds max allowed threshold {max_allowed_distance_conflict_m}m."
         )
 
+    resolved_dist: float | None = None
     if distance_policy == "POSE_PREFERRED" and pose_dist is not None:
         resolved_dist = pose_dist
     else:  # FRAME_PREFERRED (default)

@@ -16,9 +16,9 @@ def _extract_observations(
     if isinstance(data, PipeInspectionMap):
         return data.mission_id, data.observations
 
-    obs_tuple = tuple(data)
-    mission_id = obs_tuple[0].mission_id if len(obs_tuple) > 0 else "unknown"
-    return mission_id, obs_tuple
+    obs_list: list[FusedInspectionObservation | MapObservation] = list(data)
+    mission_id = obs_list[0].mission_id if len(obs_list) > 0 else "unknown"
+    return mission_id, tuple(obs_list)
 
 
 def evaluate_cleaning_effectiveness(
