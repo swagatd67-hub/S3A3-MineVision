@@ -1,0 +1,6 @@
+# PipeVision - Robot Hardware Transport dependencies
+#
+# Install with:
+#   pip install -r requirements-robot.txt
+
+pyserial>=3.5,<4
