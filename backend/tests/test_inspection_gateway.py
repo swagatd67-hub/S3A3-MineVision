@@ -3,6 +3,7 @@
 import io
 from datetime import datetime, timezone
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
@@ -26,7 +27,50 @@ from backend.app.services.inspection.gateway import (
 )
 from backend.app.services.mission.exceptions import MissionNotFoundError
 from backend.app.services.mission.orchestrator import MissionOrchestrator
+from backend.app.services.video.sewer_classifier import ClassDecision, SewerMLResult
 from robot.localization.models import LocalizationQuality, RobotPose
+
+
+class StubSewerMLEngine:
+    """Deterministic test double for Sewer-ML classification engine."""
+
+    def __init__(self, detected_classes: list[str] | None = None) -> None:
+        self.detected_classes = detected_classes if detected_classes is not None else ["CR"]
+        self.model_version = "sewer-ml-stub"
+
+    def predict(self, image: np.ndarray) -> SewerMLResult:
+        if image is None or image.size == 0:
+            raise ValueError("image must be a non-empty numpy array")
+
+        decisions = [
+            ClassDecision(
+                class_code="CR",
+                probability=0.95 if "CR" in self.detected_classes else 0.05,
+                threshold=0.5,
+                detected="CR" in self.detected_classes,
+            )
+        ]
+        return SewerMLResult(
+            decisions=decisions,
+            detected_classes=[c for c in self.detected_classes if c in self.detected_classes],
+            inference_ms=1.0,
+            model_version=self.model_version,
+        )
+
+
+@pytest.fixture(autouse=True)
+def stub_ai_engines(monkeypatch):
+    """Inject deterministic test doubles for Sewer-ML engine across all Phase 11 gateway and API tests."""
+    stub_engine = StubSewerMLEngine()
+    monkeypatch.setattr(
+        "backend.app.services.inspection.gateway.get_sewer_classifier_engine",
+        lambda *args, **kwargs: stub_engine,
+    )
+    monkeypatch.setattr(
+        "backend.app.api.video.get_sewer_classifier_engine",
+        lambda *args, **kwargs: stub_engine,
+    )
+    return stub_engine
 
 
 def create_test_image_bytes(
