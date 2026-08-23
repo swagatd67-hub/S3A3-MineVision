@@ -114,3 +114,70 @@ class FusedInspectionObservation:
                 "height": self.image_height,
             },
         }
+
+
+@dataclass(frozen=True)
+class CanonicalInspectionFrame:
+    """Canonical robot-agnostic inspection frame contract for PipeVision ingestion."""
+
+    mission_id: str
+    robot_id: str | None = None
+    frame_id: str | None = None
+    camera_id: str | None = None
+    timestamp: str | datetime | None = None
+    source: str = "photo"  # 'photo', 'video', 'live'
+    frame_index: int = 0
+    image_bytes: bytes | None = None
+    image_path: str | None = None
+    distance_m: float | None = None
+    pose: RobotPose | None = None
+    metadata: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class SingleIngestionResult:
+    """Normalized ingestion outcome for a single photo / frame."""
+
+    mission_id: str
+    frame_id: str
+    frame_index: int
+    timestamp_iso: str | None
+    source: str
+    distance_m: float | None
+    frame_path: str | None
+    observations: list[FusedInspectionObservation]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mission_id": self.mission_id,
+            "frame_id": self.frame_id,
+            "frame_index": self.frame_index,
+            "timestamp": self.timestamp_iso,
+            "source": self.source,
+            "distance_m": round(self.distance_m, 3) if self.distance_m is not None else None,
+            "frame_path": self.frame_path,
+            "observations_count": len(self.observations),
+            "observations": [obs.to_dict() for obs in self.observations],
+        }
+
+
+@dataclass(frozen=True)
+class BatchIngestionResult:
+    """Ingestion outcome summary for a batch of photos / frames."""
+
+    mission_id: str
+    total_submitted: int
+    total_succeeded: int
+    total_failed: int
+    results: list[SingleIngestionResult]
+    failures: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mission_id": self.mission_id,
+            "total_submitted": self.total_submitted,
+            "total_succeeded": self.total_succeeded,
+            "total_failed": self.total_failed,
+            "results": [r.to_dict() for r in self.results],
+            "failures": self.failures,
+        }

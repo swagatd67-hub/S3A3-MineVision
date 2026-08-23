@@ -11,9 +11,9 @@ from threading import Lock
 class FrameMetadata:
     mission_id: str
     frame_index: int
-    timestamp: datetime
-    distance_m: float
-    source: str
+    timestamp: datetime | None = None
+    distance_m: float | None = None
+    source: str = "photo"
     frame_path: str | None = None
 
 
@@ -88,7 +88,7 @@ class FrameMetadataStore:
         payload: dict[str, object] = {
             "mission_id": metadata.mission_id,
             "frame_index": metadata.frame_index,
-            "timestamp": metadata.timestamp.isoformat(),
+            "timestamp": metadata.timestamp.isoformat() if metadata.timestamp is not None else None,
             "distance_m": metadata.distance_m,
             "source": metadata.source,
             "frame_path": metadata.frame_path,
@@ -131,13 +131,18 @@ class FrameMetadataStore:
 
                 payload = json.loads(line)
 
+                raw_ts = payload.get("timestamp")
+                ts = datetime.fromisoformat(raw_ts) if raw_ts is not None else None
+                raw_dist = payload.get("distance_m")
+                dist = float(raw_dist) if raw_dist is not None else None
+
                 records.append(
                     FrameMetadata(
                         mission_id=str(payload["mission_id"]),
                         frame_index=int(payload["frame_index"]),
-                        timestamp=datetime.fromisoformat(str(payload["timestamp"])),
-                        distance_m=float(payload["distance_m"]),
-                        source=str(payload["source"]),
+                        timestamp=ts,
+                        distance_m=dist,
+                        source=str(payload.get("source", "photo")),
                         frame_path=(
                             str(payload["frame_path"])
                             if payload.get("frame_path") is not None
