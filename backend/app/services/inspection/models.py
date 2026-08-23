@@ -181,3 +181,33 @@ class BatchIngestionResult:
             "results": [r.to_dict() for r in self.results],
             "failures": self.failures,
         }
+
+
+@dataclass(frozen=True)
+class VideoIngestionResult:
+    """Ingestion outcome summary for an offline video file."""
+
+    mission_id: str
+    video_path: str
+    total_video_frames: int
+    sampled_frames: int
+    total_succeeded: int
+    total_failed: int
+    fps: float
+    duration_s: float
+    results: list[SingleIngestionResult]
+    failures: list[dict[str, Any]]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mission_id": self.mission_id,
+            "video_path": self.video_path,
+            "total_video_frames": self.total_video_frames,
+            "sampled_frames": self.sampled_frames,
+            "total_succeeded": self.total_succeeded,
+            "total_failed": self.total_failed,
+            "fps": round(self.fps, 2),
+            "duration_s": round(self.duration_s, 2),
+            "results": [r.to_dict() for r in self.results],
+            "failures": self.failures,
+        }

@@ -31,6 +31,11 @@ from backend.app.services.inspection.models import (
     FusedInspectionObservation,
     InspectionFrameMetadata,
     SingleIngestionResult,
+    VideoIngestionResult,
+)
+from backend.app.services.inspection.sidecar import (
+    load_global_directory_sidecar,
+    load_sidecar_for_image,
 )
 from backend.app.services.mission.exceptions import MissionNotFoundError
 from backend.app.services.video.detection import (
@@ -46,6 +51,57 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_MIME_TYPES = {"image/jpeg", "image/png"}
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
+
+def natural_sort_key(filename: str) -> list[int | str]:
+    """Natural numeric sorting key function for filenames (e.g. 1.jpg < 2.jpg < 10.jpg)."""
+    import re
+    return [int(text) if text.isdigit() else text.lower() for text in re.split(r"(\d+)", filename)]
+
+
+def _ensure_mission_exists(
+    db: Session,
+    mission_id: str,
+    robot_id: str | None = None,
+) -> Mission:
+    """Ensure a Mission row exists in database; create it via MissionOrchestrator or as an offline mission."""
+    from backend.app.models import Robot
+    from backend.app.services.mission.models import MissionLifecycleState
+    from backend.app.services.mission.orchestrator import MissionOrchestrator
+
+    mission = db.get(Mission, mission_id)
+    if mission is not None:
+        return mission
+
+    # If explicit robot_id is provided and registered in database, use standard orchestrator path
+    if robot_id is not None:
+        robot = db.get(Robot, robot_id)
+        if robot is not None:
+            orchestrator = MissionOrchestrator()
+            return orchestrator.create_mission(db, robot_id=robot_id, mission_id=mission_id)
+
+    # Offline mission with unavailable physical robot provenance - do NOT fabricate a fake Robot row
+    effective_robot_id = robot_id or "OFFLINE"
+    mission = Mission(
+        mission_id=mission_id,
+        robot_id=effective_robot_id,
+        objective="INSPECT",
+        status=MissionLifecycleState.CREATED.value,
+        created_at=datetime.now(timezone.utc),
+        notes="Offline media ingestion mission",
+    )
+    db.add(mission)
+    db.commit()
+    db.refresh(mission)
+
+    orchestrator = MissionOrchestrator()
+    if mission_id not in orchestrator._twins:
+        from digital_twin.synchronizer import DigitalTwinSynchronizer
+        orchestrator._twins[mission_id] = DigitalTwinSynchronizer(
+            mission_id=mission_id,
+            robot_id=effective_robot_id,
+        )
+    return mission
 
 
 def resolve_frame_id(
@@ -321,41 +377,213 @@ class InspectionIngestionGateway:
         db: Session,
         directory_path: str | Path,
         mission_id: str,
+        distance_start_m: float | None = None,
         distance_step_m: float | None = None,
         robot_id: str | None = None,
         camera_id: str | None = None,
         detector: Any | None = None,
         sewer_engine: Any | None = None,
+        auto_create_mission: bool = True,
     ) -> BatchIngestionResult:
-        """Offline workflow: Ingest an entire local directory of photo files."""
+        """Offline workflow: Ingest an entire local directory of photo files with natural sorting & sidecar metadata."""
         dir_path = Path(directory_path).resolve()
         if not dir_path.exists() or not dir_path.is_dir():
             raise InvalidImageContentError(f"Directory path does not exist or is not a directory: {directory_path}")
+
+        global_defaults, per_frame_map = load_global_directory_sidecar(dir_path)
+
+        eff_robot_id = robot_id or global_defaults.get("robot_id")
+        eff_camera_id = camera_id or global_defaults.get("camera_id")
+
+        if auto_create_mission:
+            _ensure_mission_exists(db, mission_id, robot_id=eff_robot_id)
 
         image_files = sorted(
             [
                 p for p in dir_path.iterdir()
                 if p.is_file() and p.suffix.lower() in SUPPORTED_EXTENSIONS
             ],
-            key=lambda p: p.name,
+            key=lambda p: natural_sort_key(p.name),
         )
 
         frames: list[CanonicalInspectionFrame] = []
+        eff_step_m = (
+            distance_step_m
+            if distance_step_m is not None
+            else global_defaults.get("distance_step_m")
+        )
+        eff_start_m = (
+            distance_start_m
+            if distance_start_m is not None
+            else global_defaults.get("distance_start_m")
+        )
+
         for idx, file_path in enumerate(image_files):
-            dist = (idx * distance_step_m) if distance_step_m is not None else None
+            sidecar = load_sidecar_for_image(file_path) or per_frame_map.get(file_path.name) or per_frame_map.get(file_path.stem)
+
+            r_id = eff_robot_id or (sidecar.robot_id if sidecar else None)
+            c_id = eff_camera_id or (sidecar.camera_id if sidecar else None)
+
+            dist: float | None = None
+            if eff_step_m is not None:
+                start_m = eff_start_m if eff_start_m is not None else 0.0
+                dist = start_m + (idx * eff_step_m)
+            elif sidecar and sidecar.distance_m is not None:
+                dist = sidecar.distance_m
+
+            ts = sidecar.timestamp if sidecar else None
+            pose = sidecar.pose if sidecar else None
+
             frames.append(
                 CanonicalInspectionFrame(
                     mission_id=mission_id,
-                    robot_id=robot_id,
-                    camera_id=camera_id,
+                    robot_id=r_id,
+                    camera_id=c_id,
+                    timestamp=ts,
                     source="photo",
                     frame_index=idx,
                     image_path=str(file_path),
                     distance_m=dist,
+                    pose=pose,
                 )
             )
 
         return self.ingest_batch(db, frames, detector=detector, sewer_engine=sewer_engine)
+
+    def ingest_video_file(
+        self,
+        db: Session,
+        video_path: str | Path,
+        mission_id: str,
+        frame_interval: int | None = None,
+        target_fps: float | None = None,
+        max_frames: int | None = None,
+        start_timestamp: datetime | None = None,
+        distance_start_m: float | None = None,
+        distance_step_m: float | None = None,
+        robot_id: str | None = None,
+        camera_id: str | None = None,
+        detector: Any | None = None,
+        sewer_engine: Any | None = None,
+        auto_create_mission: bool = True,
+    ) -> VideoIngestionResult:
+        """Offline workflow: Ingest an offline video file frame-by-frame with configurable sampling."""
+        from datetime import timedelta
+
+        import cv2
+
+        v_path = Path(video_path).resolve()
+        if not v_path.exists() or not v_path.is_file():
+            raise InvalidImageContentError(f"Video file path does not exist or is not a file: {video_path}")
+
+        supported_video_exts = {".mp4", ".avi", ".mov", ".mkv"}
+        if v_path.suffix.lower() not in supported_video_exts:
+            raise UnsupportedImageTypeError(f"Unsupported video extension '{v_path.suffix}'. Must be MP4, AVI, MOV, or MKV.")
+
+        capture = cv2.VideoCapture(str(v_path))
+        if not capture.isOpened():
+            raise InvalidImageContentError(f"Failed to open video file: {video_path}")
+
+        raw_fps = capture.get(cv2.CAP_PROP_FPS)
+        fps = float(raw_fps) if raw_fps > 0 else 30.0
+        total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        duration_s = total_frames / fps if fps > 0 else 0.0
+
+        if frame_interval is not None and frame_interval >= 1:
+            step = frame_interval
+        elif target_fps is not None and target_fps > 0:
+            step = max(1, round(fps / target_fps))
+        else:
+            step = 1
+
+        if auto_create_mission:
+            _ensure_mission_exists(db, mission_id, robot_id=robot_id)
+
+        raw_idx = 0
+        sampled_count = 0
+        succeeded: list[SingleIngestionResult] = []
+        failures: list[dict[str, Any]] = []
+
+        try:
+            while True:
+                ok, frame_bgr = capture.read()
+                if not ok:
+                    break
+
+                current_idx = raw_idx
+                raw_idx += 1
+
+                if (current_idx % step) != 0:
+                    continue
+
+                if max_frames is not None and sampled_count >= max_frames:
+                    break
+
+                sampled_count += 1
+
+                frame_ts: datetime | None = None
+                if start_timestamp is not None:
+                    frame_ts = start_timestamp + timedelta(seconds=current_idx / fps)
+
+                frame_dist: float | None = None
+                if distance_step_m is not None:
+                    start_m = distance_start_m if distance_start_m is not None else 0.0
+                    frame_dist = start_m + ((sampled_count - 1) * distance_step_m)
+
+                success_encode, encoded_buf = cv2.imencode(".jpg", frame_bgr)
+                if not success_encode or encoded_buf is None:
+                    failures.append({
+                        "frame_index": current_idx,
+                        "error": "Failed to encode OpenCV BGR frame to JPEG",
+                        "error_type": "EncodingError",
+                    })
+                    continue
+
+                image_bytes = encoded_buf.tobytes()
+                frame_id = f"{mission_id}_v_{current_idx:06d}"
+
+                canonical_frame = CanonicalInspectionFrame(
+                    mission_id=mission_id,
+                    robot_id=robot_id,
+                    camera_id=camera_id,
+                    frame_id=frame_id,
+                    timestamp=frame_ts,
+                    source="video",
+                    frame_index=current_idx,
+                    image_bytes=image_bytes,
+                    distance_m=frame_dist,
+                )
+
+                try:
+                    res = self.ingest_frame(
+                        db,
+                        canonical_frame,
+                        detector=detector,
+                        sewer_engine=sewer_engine,
+                    )
+                    succeeded.append(res)
+                except Exception as exc:  # noqa: BLE001
+                    failures.append({
+                        "frame_index": current_idx,
+                        "frame_id": frame_id,
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                    })
+        finally:
+            capture.release()
+
+        return VideoIngestionResult(
+            mission_id=mission_id,
+            video_path=str(v_path),
+            total_video_frames=total_frames,
+            sampled_frames=sampled_count,
+            total_succeeded=len(succeeded),
+            total_failed=len(failures),
+            fps=fps,
+            duration_s=duration_s,
+            results=succeeded,
+            failures=failures,
+        )
 
 
 def ingest_inspection_frame(
@@ -384,11 +612,13 @@ def ingest_photo_directory(
     db: Session,
     directory_path: str | Path,
     mission_id: str,
+    distance_start_m: float | None = None,
     distance_step_m: float | None = None,
     robot_id: str | None = None,
     camera_id: str | None = None,
     detector: Any | None = None,
     sewer_engine: Any | None = None,
+    auto_create_mission: bool = True,
 ) -> BatchIngestionResult:
     """Module-level convenience wrapper for offline directory photo ingestion."""
     gateway = InspectionIngestionGateway()
@@ -396,9 +626,47 @@ def ingest_photo_directory(
         db,
         directory_path,
         mission_id,
+        distance_start_m=distance_start_m,
         distance_step_m=distance_step_m,
         robot_id=robot_id,
         camera_id=camera_id,
         detector=detector,
         sewer_engine=sewer_engine,
+        auto_create_mission=auto_create_mission,
+    )
+
+
+def ingest_video_file(
+    db: Session,
+    video_path: str | Path,
+    mission_id: str,
+    frame_interval: int | None = None,
+    target_fps: float | None = None,
+    max_frames: int | None = None,
+    start_timestamp: datetime | None = None,
+    distance_start_m: float | None = None,
+    distance_step_m: float | None = None,
+    robot_id: str | None = None,
+    camera_id: str | None = None,
+    detector: Any | None = None,
+    sewer_engine: Any | None = None,
+    auto_create_mission: bool = True,
+) -> VideoIngestionResult:
+    """Module-level convenience wrapper for offline video file ingestion."""
+    gateway = InspectionIngestionGateway()
+    return gateway.ingest_video_file(
+        db,
+        video_path,
+        mission_id,
+        frame_interval=frame_interval,
+        target_fps=target_fps,
+        max_frames=max_frames,
+        start_timestamp=start_timestamp,
+        distance_start_m=distance_start_m,
+        distance_step_m=distance_step_m,
+        robot_id=robot_id,
+        camera_id=camera_id,
+        detector=detector,
+        sewer_engine=sewer_engine,
+        auto_create_mission=auto_create_mission,
     )
