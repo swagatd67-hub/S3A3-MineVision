@@ -1,6 +1,7 @@
 import math
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 import requests
 
@@ -56,7 +57,7 @@ def run() -> None:
         while True:
             distance = max(0.0, 0.15 * t)
             body_diameter = 105 + 15 * math.sin(t / 5)
-            payload = {
+            payload: dict[str, Any] = {
                 "robot_id": ROBOT_ID,
                 "mission_id": mission_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
