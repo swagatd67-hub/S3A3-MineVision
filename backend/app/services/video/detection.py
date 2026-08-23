@@ -116,8 +116,9 @@ class UltralyticsDetector:
                 model=self.model_path,
             )
 
-        boxes = results[0].boxes
-        names = results[0].names
+        first_result = results[0] if isinstance(results, (list, tuple)) else next(iter(results))
+        boxes = getattr(first_result, "boxes", None)
+        names = getattr(first_result, "names", {})
 
         if boxes is not None:
             for index in range(len(boxes)):
@@ -127,7 +128,7 @@ class UltralyticsDetector:
 
                 detections.append(
                     Detection(
-                        label=str(names[class_id]),
+                        label=str(names.get(class_id, class_id)),
                         confidence=confidence,
                         x1=float(coords[0]),
                         y1=float(coords[1]),

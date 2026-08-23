@@ -107,9 +107,9 @@ class SewerMLDataset(Dataset[tuple[Tensor, Tensor, str]]):
         image_path = self.image_dir / filename
 
         try:
-            with Image.open(image_path) as image:
-                image = image.convert("RGB")
-                image_tensor = self.transform(image)
+            with Image.open(image_path) as raw_image:
+                rgb_image = raw_image.convert("RGB")
+                image_tensor = self.transform(rgb_image)
         except Exception as exc:
             raise RuntimeError(f"Failed to load image: {image_path}") from exc
 

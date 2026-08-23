@@ -8,7 +8,12 @@ from sqlalchemy.orm import Session
 from backend.app.db import get_db
 from backend.app.models import Telemetry
 from backend.app.realtime import telemetry_broadcaster
-from backend.app.schemas.telemetry import TelemetryPacket
+from backend.app.schemas.telemetry import (
+    IMUData,
+    PressureData,
+    TelemetryPacket,
+    WaterQualityData,
+)
 from backend.app.services.realtime_analytics import build_live_analytics_update
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
@@ -16,6 +21,17 @@ DatabaseSession = Annotated[Session, Depends(get_db)]
 
 
 def to_packet(row: Telemetry) -> TelemetryPacket:
+    imu_obj = IMUData(**row.imu) if isinstance(row.imu, dict) else (row.imu if isinstance(row.imu, IMUData) else None)
+    pressure_obj = (
+        PressureData(**row.pressure)
+        if isinstance(row.pressure, dict)
+        else (row.pressure if isinstance(row.pressure, PressureData) else None)
+    )
+    water_obj = (
+        WaterQualityData(**row.water)
+        if isinstance(row.water, dict)
+        else (row.water if isinstance(row.water, WaterQualityData) else None)
+    )
     return TelemetryPacket(
         robot_id=row.robot_id,
         mission_id=row.mission_id,
@@ -24,9 +40,9 @@ def to_packet(row: Telemetry) -> TelemetryPacket:
         distance_m=row.distance_m,
         body_diameter_mm=row.body_diameter_mm,
         state=row.state,
-        imu=row.imu,
-        pressure=row.pressure,
-        water=row.water,
+        imu=imu_obj,
+        pressure=pressure_obj,
+        water=water_obj,
     )
 
 

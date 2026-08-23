@@ -106,9 +106,9 @@ def test_classify_sewer_frame_api_success(tmp_path, monkeypatch):
         "/api/v1/video/frames/image",
         data={
             "mission_id": "M-SEWER-001",
-            "frame_index": 42,
+            "frame_index": "42",
             "timestamp": "2026-08-19T12:00:00Z",
-            "distance_m": 12.5,
+            "distance_m": "12.5",
             "source": "webcam",
         },
         files={"image": ("test.jpg", buffer.tobytes(), "image/jpeg")},

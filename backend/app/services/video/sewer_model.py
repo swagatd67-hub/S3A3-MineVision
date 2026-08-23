@@ -12,6 +12,51 @@ from torchvision.models import (
 NUM_CLASSES = 17
 
 
+class ResNetBackbone(nn.Module):
+    """ResNet-18 backbone with a custom dropout-linear classifier head."""
+
+    def __init__(
+        self,
+        num_classes: int,
+        pretrained: bool = True,
+    ) -> None:
+        super().__init__()
+        weights = ResNet18_Weights.DEFAULT if pretrained else None
+        base_resnet = resnet18(weights=weights)
+
+        self.conv1 = base_resnet.conv1
+        self.bn1 = base_resnet.bn1
+        self.relu = base_resnet.relu
+        self.maxpool = base_resnet.maxpool
+        self.layer1 = base_resnet.layer1
+        self.layer2 = base_resnet.layer2
+        self.layer3 = base_resnet.layer3
+        self.layer4 = base_resnet.layer4
+        self.avgpool = base_resnet.avgpool
+
+        feature_count = base_resnet.fc.in_features
+        self.fc: nn.Module = nn.Sequential(
+            nn.Dropout(p=0.2),
+            nn.Linear(
+                feature_count,
+                num_classes,
+            ),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.avgpool(x)
+        x = torch.flatten(x, 1)
+        return self.fc(x)
+
+
 class SewerDefectClassifier(nn.Module):
     """PipeVision 17-label Sewer-ML classifier."""
 
@@ -21,24 +66,10 @@ class SewerDefectClassifier(nn.Module):
         pretrained: bool = True,
     ) -> None:
         super().__init__()
-
-        weights = ResNet18_Weights.DEFAULT if pretrained else None
-
-        backbone = resnet18(
-            weights=weights,
+        self.backbone = ResNetBackbone(
+            num_classes=num_classes,
+            pretrained=pretrained,
         )
-
-        feature_count = backbone.fc.in_features
-
-        backbone.fc = nn.Sequential(
-            nn.Dropout(p=0.2),
-            nn.Linear(
-                feature_count,
-                num_classes,
-            ),
-        )
-
-        self.backbone = backbone
 
     def forward(
         self,
