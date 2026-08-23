@@ -309,9 +309,25 @@ def classify_sewer_frame(
 class DirectoryIngestionRequest(BaseModel):
     mission_id: str = Field(min_length=1, max_length=64)
     directory_path: str = Field(min_length=1, max_length=512)
+    distance_start_m: float | None = Field(default=None)
     distance_step_m: float | None = Field(default=None, ge=0.0)
     robot_id: str | None = Field(default=None, max_length=64)
     camera_id: str | None = Field(default=None, max_length=64)
+    auto_create_mission: bool = Field(default=True)
+
+
+class VideoIngestionRequest(BaseModel):
+    mission_id: str = Field(min_length=1, max_length=64)
+    video_path: str = Field(min_length=1, max_length=512)
+    frame_interval: int | None = Field(default=None, ge=1)
+    target_fps: float | None = Field(default=None, gt=0.0)
+    max_frames: int | None = Field(default=None, ge=1)
+    start_timestamp: datetime | None = Field(default=None)
+    distance_start_m: float | None = Field(default=None)
+    distance_step_m: float | None = Field(default=None, ge=0.0)
+    robot_id: str | None = Field(default=None, max_length=64)
+    camera_id: str | None = Field(default=None, max_length=64)
+    auto_create_mission: bool = Field(default=True)
 
 
 ALLOWED_INGEST_ROOT = Path("data/import").resolve()
@@ -449,9 +465,11 @@ def ingest_directory_images(
             db,
             directory_path=payload.directory_path,
             mission_id=payload.mission_id,
+            distance_start_m=payload.distance_start_m,
             distance_step_m=payload.distance_step_m,
             robot_id=payload.robot_id,
             camera_id=payload.camera_id,
+            auto_create_mission=payload.auto_create_mission,
         )
         return batch_res.to_dict()
     except MissionNotFoundError as exc:
@@ -460,3 +478,45 @@ def ingest_directory_images(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Directory ingestion failed: {exc}") from exc
+
+
+@router.post("/ingest/video", status_code=201)
+def ingest_video_file_endpoint(
+    payload: VideoIngestionRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    """Offline workflow endpoint: Process an offline video file into PipeVision."""
+    target_path = Path(payload.video_path).resolve()
+    ALLOWED_INGEST_ROOT.mkdir(parents=True, exist_ok=True)
+    try:
+        target_path.relative_to(ALLOWED_INGEST_ROOT)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Video file path must be within allowed import root ({ALLOWED_INGEST_ROOT})",
+        ) from exc
+
+    try:
+        video_res = ingestion_gateway.ingest_video_file(
+            db,
+            video_path=payload.video_path,
+            mission_id=payload.mission_id,
+            frame_interval=payload.frame_interval,
+            target_fps=payload.target_fps,
+            max_frames=payload.max_frames,
+            start_timestamp=payload.start_timestamp,
+            distance_start_m=payload.distance_start_m,
+            distance_step_m=payload.distance_step_m,
+            robot_id=payload.robot_id,
+            camera_id=payload.camera_id,
+            auto_create_mission=payload.auto_create_mission,
+        )
+        return video_res.to_dict()
+    except MissionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except InvalidImageContentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except UnsupportedImageTypeError as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Video ingestion failed: {exc}") from exc
