@@ -11,13 +11,14 @@ from robot.transport.base import (
 )
 from robot.transport.ethernet import EthernetTransport
 from robot.transport.serial import SerialTransport
-from robot.transport.simulator import SimulatorTransport
+from robot.transport.simulator import SimulatorConfig, SimulatorTransport
 
 __all__ = [
     "EthernetTransport",
     "InvalidMessageError",
     "RobotTransport",
     "SerialTransport",
+    "SimulatorConfig",
     "SimulatorTransport",
     "TransportConnectionError",
     "TransportError",
