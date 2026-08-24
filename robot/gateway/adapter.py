@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session
 
@@ -27,7 +27,10 @@ from robot.gateway.models import (
     GatewayHealth,
     HardwareFramePacket,
 )
-from robot.localization.localizer import RobotLocalizer
+
+if TYPE_CHECKING:
+    from robot.localization.localizer import RobotLocalizer
+
 from robot.localization.models import RobotPose
 from robot.telemetry.exceptions import TelemetryError
 from robot.telemetry.models import RobotTelemetry

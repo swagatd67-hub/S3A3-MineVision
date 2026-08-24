@@ -366,6 +366,17 @@ class MissionOrchestrator:
             else 0
         )
 
+        s_at = (
+            mission.started_at.replace(tzinfo=timezone.utc)
+            if mission.started_at and mission.started_at.tzinfo is None
+            else mission.started_at
+        )
+        c_at = (
+            mission.completed_at.replace(tzinfo=timezone.utc)
+            if mission.completed_at and mission.completed_at.tzinfo is None
+            else mission.completed_at
+        )
+
         progress = MissionProgressMetrics(
             current_distance_m=cur_dist,
             total_inspected_distance_m=total_inspected,
@@ -373,11 +384,11 @@ class MissionOrchestrator:
             morphology_measurements_count=morphology_count,
             cleaning_operations_count=1 if twin_state.active_cleaning_operation else 0,
             duration_sec=(
-                (mission.completed_at - mission.started_at).total_seconds()
-                if mission.completed_at and mission.started_at
+                (c_at - s_at).total_seconds()
+                if c_at and s_at
                 else (
-                    (datetime.now(timezone.utc) - mission.started_at).total_seconds()
-                    if mission.started_at
+                    (datetime.now(timezone.utc) - s_at).total_seconds()
+                    if s_at
                     else None
                 )
             ),
