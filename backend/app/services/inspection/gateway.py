@@ -185,6 +185,7 @@ class InspectionIngestionGateway:
         frame: CanonicalInspectionFrame,
         detector: Any | None = None,
         sewer_engine: Any | None = None,
+        commit: bool = True,
     ) -> SingleIngestionResult:
         """Ingest a single canonical inspection frame through AI perception, fusion, and persistence."""
         # 1. Mission Existence Validation
@@ -286,7 +287,7 @@ class InspectionIngestionGateway:
             self.orchestrator.ingest_pose(db, frame.mission_id, frame.pose)
 
         for obs in fused_observations:
-            self.orchestrator.ingest_inspection_observation(db, frame.mission_id, obs)
+            self.orchestrator.ingest_inspection_observation(db, frame.mission_id, obs, commit=commit)
 
         if frame.distance_m is not None:
             self.orchestrator.update_mapping(db, frame.mission_id)
@@ -338,6 +339,7 @@ class InspectionIngestionGateway:
                     frame,
                     detector=active_detector,
                     sewer_engine=active_sewer,
+                    commit=False,
                 )
                 succeeded.append(res)
             except (
@@ -362,6 +364,25 @@ class InspectionIngestionGateway:
                         "error_type": type(exc).__name__,
                     }
                 )
+
+        if succeeded:
+            try:
+                db.commit()
+            except Exception as commit_exc:  # noqa: BLE001
+                logger.error("Failed to commit batch ingestion for mission %s: %s", mission_id, commit_exc)
+                db.rollback()
+                failures.extend(
+                    [
+                        {
+                            "frame_index": s.frame_index,
+                            "frame_id": s.frame_id,
+                            "error": f"Batch DB commit failed: {commit_exc}",
+                            "error_type": "BatchCommitError",
+                        }
+                        for s in succeeded
+                    ]
+                )
+                succeeded = []
 
         return BatchIngestionResult(
             mission_id=mission_id,

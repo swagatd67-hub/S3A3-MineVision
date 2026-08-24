@@ -10,7 +10,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from backend.app.services.video.sewer_classifier import (
-        SewerMLInferenceEngine,
+        SewerMLEngineProtocol,
         SewerMLResult,
     )
 
@@ -199,7 +199,7 @@ def filter_detections(
 
 def analyze_frame_with_sewer_ml(
     image: np.ndarray,
-    engine: SewerMLInferenceEngine | None = None,
+    engine: SewerMLEngineProtocol | None = None,
 ) -> SewerMLResult:
     """Run Sewer-ML multi-label classification on an OpenCV BGR frame array."""
     from backend.app.services.video.sewer_classifier import analyze_sewer_frame
@@ -209,7 +209,7 @@ def analyze_frame_with_sewer_ml(
 
 def analyze_image_with_sewer_ml(
     image_path: str | Path,
-    engine: SewerMLInferenceEngine | None = None,
+    engine: SewerMLEngineProtocol | None = None,
 ) -> SewerMLResult:
     """Read an image file from disk and run Sewer-ML multi-label classification."""
     image = cv2.imread(str(image_path))

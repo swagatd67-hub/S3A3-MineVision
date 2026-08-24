@@ -27,15 +27,15 @@ from robot.gateway.models import (
     GatewayHealth,
     HardwareFramePacket,
 )
-
-if TYPE_CHECKING:
-    from robot.localization.localizer import RobotLocalizer
-
+from robot.gateway.queue import BoundedFrameQueue
 from robot.localization.models import RobotPose
 from robot.telemetry.exceptions import TelemetryError
 from robot.telemetry.models import RobotTelemetry
 from robot.telemetry.parser import parse_telemetry
 from robot.transport.base import RobotTransport
+
+if TYPE_CHECKING:
+    from robot.localization.localizer import RobotLocalizer
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ class RobotGatewayAdapter:
         telemetry_timeout_s: float = 5.0,
         frame_timeout_s: float = 10.0,
         auto_ingest_backend: bool = True,
+        frame_queue: BoundedFrameQueue | None = None,
     ) -> None:
         self.transport = transport
         self.controller = controller or RobotController(transport)
@@ -71,6 +72,7 @@ class RobotGatewayAdapter:
         self.telemetry_timeout_s = telemetry_timeout_s
         self.frame_timeout_s = frame_timeout_s
         self.auto_ingest_backend = auto_ingest_backend
+        self.frame_queue = frame_queue
 
         self._connection_state = GatewayConnectionState.DISCONNECTED
         self._failure_reason = GatewayFailureReason.NONE
@@ -448,6 +450,12 @@ class RobotGatewayAdapter:
 
         transport_type = type(self.transport).__name__
 
+        queue_dropped = (
+            self.frame_queue.get_metrics().total_dropped
+            if self.frame_queue is not None
+            else 0
+        )
+
         return GatewayHealth(
             connection_state=self._connection_state,
             failure_reason=effective_failure,
@@ -460,6 +468,6 @@ class RobotGatewayAdapter:
             last_frame_timestamp=self._last_frame_timestamp,
             telemetry_packet_count=self._telemetry_packet_count,
             frame_count=self._frame_count,
-            dropped_frame_count=self._dropped_frame_count,
+            dropped_frame_count=self._dropped_frame_count + queue_dropped,
             error_count=self._error_count,
         )

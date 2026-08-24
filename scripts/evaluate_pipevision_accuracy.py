@@ -19,7 +19,7 @@ from backend.app.services.inspection.models import (
     SingleIngestionResult,
 )
 from backend.app.services.video.sewer_classifier import (
-    SewerMLInferenceEngine,
+    SewerMLEngineProtocol,
     get_sewer_classifier_engine,
 )
 
@@ -43,7 +43,7 @@ def run_sewer_ml_accuracy_evaluation(
     )
 
     # Attempt to load inference engine if weights exist
-    engine: SewerMLInferenceEngine | None = None
+    engine: SewerMLEngineProtocol | None = None
     try:
         engine = get_sewer_classifier_engine()
     except (FileNotFoundError, ValueError, RuntimeError) as exc:

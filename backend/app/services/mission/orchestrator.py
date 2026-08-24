@@ -7,6 +7,7 @@ Inspection Mapping, Morphology Analysis, Cleaning Domain, and Digital Twin.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Self
 from uuid import uuid4
 
@@ -52,9 +53,11 @@ class MissionOrchestrator:
         if getattr(self, "_initialized", False):
             return
         self._initialized = True
+        self._lock = Lock()
         # In-memory domain state caches indexed by mission_id
         self._twins: dict[str, DigitalTwinSynchronizer] = {}
         self._observations: dict[str, list[FusedInspectionObservation]] = {}
+        self._observation_ids: dict[str, set[str]] = {}
         self._telemetries: dict[str, list[RobotTelemetry]] = {}
         self._poses: dict[str, list[RobotPose]] = {}
 
@@ -197,7 +200,11 @@ class MissionOrchestrator:
         if telemetry is None:
             raise ValueError("Failed to parse telemetry payload.")
 
-        self._telemetries.setdefault(mission_id, []).append(telemetry)
+        with self._lock:
+            telem_list = self._telemetries.setdefault(mission_id, [])
+            telem_list.append(telemetry)
+            if len(telem_list) > 1000:
+                del telem_list[:-1000]
 
         twin = self._twins.get(mission_id)
         if twin is None:
@@ -212,7 +219,11 @@ class MissionOrchestrator:
         if mission is None:
             raise MissionNotFoundError(f"Mission '{mission_id}' not found.")
 
-        self._poses.setdefault(mission_id, []).append(pose)
+        with self._lock:
+            pose_list = self._poses.setdefault(mission_id, [])
+            pose_list.append(pose)
+            if len(pose_list) > 1000:
+                del pose_list[:-1000]
 
         twin = self._twins.get(mission_id)
         if twin is None:
@@ -222,18 +233,32 @@ class MissionOrchestrator:
         return twin.update_pose(pose, mission_id=mission_id)
 
     def ingest_inspection_observation(
-        self, db: Session, mission_id: str, obs: FusedInspectionObservation
+        self,
+        db: Session,
+        mission_id: str,
+        obs: FusedInspectionObservation,
+        commit: bool = True,
     ) -> DigitalTwinState:
         """Ingest fused inspection observation, persist to DB, and update Digital Twin."""
         mission = db.get(Mission, mission_id)
         if mission is None:
             raise MissionNotFoundError(f"Mission '{mission_id}' not found.")
 
-        obs_list = self._observations.setdefault(mission_id, [])
-        is_new = not any(o.observation_id == obs.observation_id for o in obs_list)
+        with self._lock:
+            obs_list = self._observations.setdefault(mission_id, [])
+            id_set = self._observation_ids.setdefault(mission_id, set())
+
+            # Check both set and list for backwards compatibility
+            if not id_set and obs_list:
+                id_set.update(o.observation_id for o in obs_list)
+
+            is_new = obs.observation_id not in id_set
+
+            if is_new:
+                obs_list.append(obs)
+                id_set.add(obs.observation_id)
 
         if is_new:
-            obs_list.append(obs)
             # Persist observation
             obs_row = InspectionObservationRow(
                 observation_id=obs.observation_id,
@@ -263,7 +288,8 @@ class MissionOrchestrator:
                 ),
             )
             db.merge(obs_row)
-            db.commit()
+            if commit:
+                db.commit()
 
         twin = self._twins.get(mission_id)
         if twin is None:

@@ -11,9 +11,9 @@ from backend.app.services.video.sewer_classifier import (
     DEFAULT_CHECKPOINT_PATH,
     DEFAULT_THRESHOLDS_PATH,
     ClassDecision,
+    NullSewerMLEngine,
     SewerMLInferenceEngine,
     SewerMLResult,
-    analyze_sewer_frame,
     get_default_checkpoint_path,
     get_default_thresholds_path,
     get_sewer_classifier_engine,
@@ -253,18 +253,46 @@ def test_environment_variable_path_resolution(
     assert get_default_thresholds_path() == custom_thresh
 
 
-def test_analyze_sewer_frame_service_function(
+def test_production_missing_checkpoint_raises_error(tmp_path: Path) -> None:
+    """Production mode: missing checkpoint MUST raise FileNotFoundError."""
+    reset_sewer_classifier_engine()
+    missing_ckpt = tmp_path / "non_existent_model.pt"
+
+    with pytest.raises(FileNotFoundError, match="Production model loading requires valid weights"):
+        get_sewer_classifier_engine(
+            checkpoint_path=missing_ckpt,
+            allow_null_fallback=False,
+            force_reload=True,
+        )
+    reset_sewer_classifier_engine()
+
+
+def test_explicit_test_null_fallback_mode(tmp_path: Path) -> None:
+    """Test/CI mode: missing checkpoint returns NullSewerMLEngine when allow_null_fallback=True."""
+    reset_sewer_classifier_engine()
+    missing_ckpt = tmp_path / "non_existent_model.pt"
+
+    engine = get_sewer_classifier_engine(
+        checkpoint_path=missing_ckpt,
+        allow_null_fallback=True,
+        force_reload=True,
+    )
+    assert isinstance(engine, NullSewerMLEngine)
+    reset_sewer_classifier_engine()
+
+
+def test_normal_production_checkpoint_loading(
     dummy_checkpoint_and_thresholds: tuple[Path, Path],
 ) -> None:
+    """Normal production model loading when checkpoint exists."""
     checkpoint_path, thresholds_path = dummy_checkpoint_and_thresholds
-    engine = SewerMLInferenceEngine(
+    reset_sewer_classifier_engine()
+
+    engine = get_sewer_classifier_engine(
         checkpoint_path=checkpoint_path,
         thresholds_path=thresholds_path,
         device="cpu",
+        force_reload=True,
     )
-
-    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    result = analyze_sewer_frame(frame, engine=engine)
-
-    assert isinstance(result, SewerMLResult)
-    assert len(result.decisions) == 17
+    assert isinstance(engine, SewerMLInferenceEngine)
+    reset_sewer_classifier_engine()

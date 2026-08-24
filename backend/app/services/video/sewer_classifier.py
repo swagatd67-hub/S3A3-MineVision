@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Protocol
 
 import cv2
 import numpy as np
@@ -20,12 +21,46 @@ from backend.app.services.video.sewer_model import (
     load_sewer_classifier,
 )
 
+logger = logging.getLogger(__name__)
+
 DEFAULT_CHECKPOINT_PATH = Path("experiments/sewer/E009/best.pt")
 DEFAULT_THRESHOLDS_PATH = Path("experiments/sewer/E009/thresholds.json")
 DEFAULT_MODEL_VERSION = "sewer-ml-e009"
 
+
+class SewerMLEngineProtocol(Protocol):
+    """Protocol representing any Sewer-ML inference engine (production or null test double)."""
+
+    model_version: str
+
+    def predict(self, image: np.ndarray) -> SewerMLResult:
+        ...
+
+
 _ENGINE_LOCK = Lock()
-_SHARED_ENGINE: SewerMLInferenceEngine | None = None
+_SHARED_ENGINE: SewerMLEngineProtocol | None = None
+
+
+class NullSewerMLEngine:
+    """Deterministic no-op Sewer-ML engine for off-hardware testing/CI when model weights are absent."""
+
+    def __init__(self, model_version: str = "sewer-ml-null") -> None:
+        self.model_version = model_version
+
+    def predict(self, image: np.ndarray) -> SewerMLResult:
+        if image is None or not isinstance(image, np.ndarray) or image.size == 0:
+            raise ValueError("image must be a non-empty numpy array")
+
+        decisions = [
+            ClassDecision(class_code=cls, probability=0.01, threshold=0.5, detected=False)
+            for cls in DEFECT_CLASSES
+        ]
+        return SewerMLResult(
+            decisions=decisions,
+            detected_classes=[],
+            inference_ms=0.1,
+            model_version=self.model_version,
+        )
 
 
 def get_default_checkpoint_path() -> Path:
@@ -43,8 +78,14 @@ def get_sewer_classifier_engine(
     thresholds_path: str | Path | None = None,
     device: str | torch.device | None = None,
     force_reload: bool = False,
-) -> SewerMLInferenceEngine:
-    """Thread-safe singleton getter for SewerMLInferenceEngine."""
+    allow_null_fallback: bool = False,
+) -> SewerMLEngineProtocol:
+    """Thread-safe singleton getter for SewerMLInferenceEngine.
+
+    By default (allow_null_fallback=False), missing model checkpoints raise FileNotFoundError
+    in production. Null engine fallback is only enabled when allow_null_fallback=True or when
+    ALLOW_NULL_SEWER_ENGINE environment variable is set to true.
+    """
     global _SHARED_ENGINE
 
     with _ENGINE_LOCK:
@@ -60,12 +101,29 @@ def get_sewer_classifier_engine(
                 else get_default_thresholds_path()
             )
 
-            _SHARED_ENGINE = SewerMLInferenceEngine(
-                checkpoint_path=ckpt_path,
-                thresholds_path=thresh_path,
-                device=device,
-            )
+            if not ckpt_path.exists():
+                is_null_allowed = (
+                    allow_null_fallback
+                    or os.getenv("ALLOW_NULL_SEWER_ENGINE", "").lower() in ("1", "true", "yes")
+                )
+                if is_null_allowed:
+                    logger.warning(
+                        "Sewer-ML checkpoint not found at %s. Falling back to NullSewerMLEngine (explicitly enabled).",
+                        ckpt_path,
+                    )
+                    _SHARED_ENGINE = NullSewerMLEngine()
+                else:
+                    raise FileNotFoundError(
+                        f"Sewer-ML model checkpoint not found at '{ckpt_path}'. Production model loading requires valid weights."
+                    )
+            else:
+                _SHARED_ENGINE = SewerMLInferenceEngine(
+                    checkpoint_path=ckpt_path,
+                    thresholds_path=thresh_path,
+                    device=device,
+                )
 
+        assert _SHARED_ENGINE is not None
         return _SHARED_ENGINE
 
 
@@ -78,7 +136,7 @@ def reset_sewer_classifier_engine() -> None:
 
 def analyze_sewer_frame(
     image: np.ndarray,
-    engine: SewerMLInferenceEngine | None = None,
+    engine: SewerMLEngineProtocol | None = None,
 ) -> SewerMLResult:
     """Service-level function to run Sewer-ML inference on an OpenCV BGR frame."""
     active_engine = engine or get_sewer_classifier_engine()
