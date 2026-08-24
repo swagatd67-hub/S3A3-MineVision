@@ -1,10 +1,11 @@
-"""Integration Bridges for Digital Twin and Pipe Inspection Mapping Domains (Phases 23 & 24)."""
+"""Integration Bridges for Digital Twin and Pipe Inspection Mapping Domains (Phases 23, 24 & 25)."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
 from mapping.models import PipeInspectionMap
+from reconstruction.analysis_models import Pipe3DAnalysisReport
 from reconstruction.coordinates import cylindrical_to_cartesian
 from reconstruction.defect_models import Grouped3DDefect, Projected3DDefect
 from reconstruction.models import Reconstruction3DOutput
@@ -50,6 +51,23 @@ def associate_projected_defects_with_digital_twin(
         "grouped_clusters_count": len(grouped_defects),
         "grouped_clusters": [g.to_dict() for g in grouped_defects],
     }
+    return base_dict
+
+
+def associate_advanced_3d_analysis_with_digital_twin(
+    digital_twin_state: DigitalTwinState | Any,
+    analysis_report: Pipe3DAnalysisReport,
+) -> dict[str, Any]:
+    """Expose Phase 25 Advanced 3D Condition Analysis as additive derived data in Digital Twin state dictionary."""
+    base_dict: dict[str, Any]
+    if hasattr(digital_twin_state, "to_dict"):
+        base_dict = digital_twin_state.to_dict()
+    elif isinstance(digital_twin_state, dict):
+        base_dict = dict(digital_twin_state)
+    else:
+        base_dict = {"digital_twin_state": str(digital_twin_state)}
+
+    base_dict["advanced_3d_analysis"] = analysis_report.to_dict()
     return base_dict
 
 
@@ -127,3 +145,19 @@ def associate_projected_defects_with_mapping(
         linked_observations.append(obs_dict)
 
     return tuple(linked_observations)
+
+
+def associate_advanced_3d_analysis_with_mapping(
+    pipe_map: PipeInspectionMap,
+    analysis_report: Pipe3DAnalysisReport,
+) -> dict[str, Any]:
+    """Expose section-level and summary 3D condition analytics to existing mapping as an additive layer."""
+    map_dict = pipe_map.to_dict()
+    map_dict["advanced_3d_analysis"] = {
+        "analysis_version": analysis_report.analysis_version,
+        "scale_status": analysis_report.scale_status.value,
+        "overall_condition_score": analysis_report.summary.overall_condition_score,
+        "mean_defect_density_per_m": analysis_report.summary.mean_defect_density_per_m,
+        "sections": [s.to_dict() for s in analysis_report.sections],
+    }
+    return map_dict
