@@ -1,8 +1,4 @@
-"""Integration Bridges for Digital Twin and Pipe Inspection Mapping Domains.
-
-Note: Provides spatial coordinate association only. Full 3D defect projection, defect boundary estimation,
-and defect spatial analysis belong to Phase 24 (Defect Projection).
-"""
+"""Integration Bridges for Digital Twin and Pipe Inspection Mapping Domains (Phases 23 & 24)."""
 
 from __future__ import annotations
 
@@ -10,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from mapping.models import PipeInspectionMap
 from reconstruction.coordinates import cylindrical_to_cartesian
+from reconstruction.defect_models import Grouped3DDefect, Projected3DDefect
 from reconstruction.models import Reconstruction3DOutput
 
 if TYPE_CHECKING:
@@ -33,14 +30,34 @@ def associate_reconstruction_with_digital_twin(
     return base_dict
 
 
+def associate_projected_defects_with_digital_twin(
+    digital_twin_state: DigitalTwinState | Any,
+    projected_defects: tuple[Projected3DDefect, ...],
+    grouped_defects: tuple[Grouped3DDefect, ...] = (),
+) -> dict[str, Any]:
+    """Attach Phase 24 projected 3D defect information as an additive spatial layer in Digital Twin state dictionary."""
+    base_dict: dict[str, Any]
+    if hasattr(digital_twin_state, "to_dict"):
+        base_dict = digital_twin_state.to_dict()
+    elif isinstance(digital_twin_state, dict):
+        base_dict = dict(digital_twin_state)
+    else:
+        base_dict = {"digital_twin_state": str(digital_twin_state)}
+
+    base_dict["projected_defects_3d"] = {
+        "count": len(projected_defects),
+        "defects": [d.to_dict() for d in projected_defects],
+        "grouped_clusters_count": len(grouped_defects),
+        "grouped_clusters": [g.to_dict() for g in grouped_defects],
+    }
+    return base_dict
+
+
 def associate_observations_with_3d_reconstruction(
     pipe_map: PipeInspectionMap,
     reconstruction: Reconstruction3DOutput,
 ) -> tuple[dict[str, Any], ...]:
-    """Provide generic 3D spatial coordinate association for 2D pipe map observations.
-
-    Full 3D defect projection and defect surface geometry are reserved for Phase 24.
-    """
+    """Provide generic 3D spatial coordinate association for 2D pipe map observations."""
     if not reconstruction.centerline or not reconstruction.centerline.points:
         return ()
 
@@ -90,3 +107,23 @@ def associate_observations_with_3d_reconstruction(
         )
 
     return tuple(mapped_3d_obs)
+
+
+def associate_projected_defects_with_mapping(
+    pipe_map: PipeInspectionMap,
+    projected_defects: tuple[Projected3DDefect, ...],
+) -> tuple[dict[str, Any], ...]:
+    """Expose optional 3D defect association for PipeInspectionMap observations without altering 2D mapping semantics."""
+    defects_by_obs_id = {d.observation_id: d for d in projected_defects}
+    linked_observations: list[dict[str, Any]] = []
+
+    for obs in pipe_map.observations:
+        obs_dict = obs.to_dict()
+        proj = defects_by_obs_id.get(obs.observation_id)
+        if proj is not None and proj.point_3d is not None:
+            obs_dict["projected_3d"] = proj.to_dict()
+        else:
+            obs_dict["projected_3d"] = None
+        linked_observations.append(obs_dict)
+
+    return tuple(linked_observations)
