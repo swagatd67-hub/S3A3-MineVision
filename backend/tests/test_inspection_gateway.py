@@ -107,6 +107,7 @@ def db_session(tmp_path):
     # Reset orchestrator singleton state and create mission via real orchestrator path
     orchestrator = MissionOrchestrator()
     orchestrator._observations.clear()
+    orchestrator._observation_ids.clear()
     orchestrator._twins.clear()
     orchestrator._telemetries.clear()
     orchestrator._poses.clear()
@@ -320,6 +321,34 @@ def test_batch_ingestion_partial_failure(db_session):
     assert res.failures[0]["frame_index"] == 1
 
 
+def test_batch_commit_empty_batch(db_session):
+    res = ingest_inspection_batch(db_session, [])
+    assert res.total_submitted == 0
+    assert res.total_succeeded == 0
+    assert res.total_failed == 0
+    assert res.results == []
+
+
+def test_batch_commit_failure_rollback(db_session, monkeypatch):
+    img1 = create_test_image_bytes(color="red")
+    frames = [
+        CanonicalInspectionFrame(mission_id="test-mission-01", frame_index=0, image_bytes=img1),
+    ]
+
+    # Force commit failure on db
+    def failing_commit():
+        raise RuntimeError("Simulated DB Disk Write Error")
+
+    monkeypatch.setattr(db_session, "commit", failing_commit)
+
+    res = ingest_inspection_batch(db_session, frames)
+
+    assert res.total_succeeded == 0
+    assert res.total_failed == 1
+    assert res.failures[0]["error_type"] == "BatchCommitError"
+    assert "Simulated DB Disk Write Error" in res.failures[0]["error"]
+
+
 # ============================================================================
 # 5. Offline Directory Workflow Tests & Security Checks
 # ============================================================================
@@ -371,7 +400,7 @@ def test_observation_persistence_and_digital_twin(db_session):
         distance_m=5.0,
     )
 
-    res = ingest_inspection_frame(db_session, frame)
+    res = ingest_inspection_frame(db_session, frame, sewer_engine=StubSewerMLEngine())
     assert len(res.observations) > 0
 
     # Verify DB persistence

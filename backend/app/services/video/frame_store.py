@@ -172,6 +172,12 @@ class FrameMetadataStore:
         mission_id: str,
         frame_index: int,
     ) -> Path | None:
+        mission_dir = self._mission_dir(mission_id)
+        for ext in (".jpg", ".jpeg", ".png"):
+            candidate = mission_dir / f"frame-{frame_index:06d}{ext}"
+            if candidate.exists():
+                return candidate.resolve()
+
         record = self.get(
             mission_id,
             frame_index,
