@@ -330,7 +330,9 @@ class VideoIngestionRequest(BaseModel):
     auto_create_mission: bool = Field(default=True)
 
 
-ALLOWED_INGEST_ROOT = Path("data/import").resolve()
+from backend.app.config import get_settings
+
+ALLOWED_INGEST_ROOT = get_settings().media_import_root.resolve()
 
 
 @router.post("/ingest/image", status_code=201)
@@ -353,6 +355,13 @@ async def ingest_single_image(
     image_bytes = await image.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="empty_image")
+
+    settings = get_settings()
+    if len(image_bytes) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Image upload size exceeds maximum allowed limit of {settings.max_upload_size_bytes} bytes",
+        )
 
     # Construct pose if spatial coordinates are explicitly provided.
     # Per RobotPose specification (robot/localization/models.py), x is the canonical longitudinal
@@ -410,6 +419,13 @@ async def ingest_batch_images(
     """Ingest a batch of photos or frames into PipeVision."""
     if not images:
         raise HTTPException(status_code=400, detail="empty_batch")
+
+    settings = get_settings()
+    if len(images) > settings.max_batch_image_count:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch image count exceeds maximum allowed limit of {settings.max_batch_image_count}",
+        )
 
     frames: list[CanonicalInspectionFrame] = []
 
