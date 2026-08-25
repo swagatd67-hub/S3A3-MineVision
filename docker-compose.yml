@@ -1,9 +1,51 @@
 services:
-  api:
-    image: python:3.13-slim
-    working_dir: /workspace
-    volumes:
-      - ./:/workspace
+  db:
+    image: postgis/postgis:15-3.3-alpine
+    container_name: pipevision-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}
+      POSTGRES_DB: ${POSTGRES_DB:-pipevision}
     ports:
-      - "8000:8000"
-    command: sh -c "pip install -r backend/requirements.txt && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-pipevision}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pipevision-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD environment variable is required}@db:5432/${POSTGRES_DB:-pipevision}}
+      MEDIA_IMPORT_ROOT: data/import
+      MEDIA_STORAGE_ROOT: data/frames
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ALLOW_NULL_SEWER_ENGINE: ${ALLOW_NULL_SEWER_ENGINE:-false}
+    volumes:
+      - pipevision-import:/workspace/data/import
+      - pipevision-frames:/workspace/data/frames
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  pgdata:
+  pipevision-import:
+  pipevision-frames:
