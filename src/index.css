@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0d0e0f;
+  --color-surface: #131415;
+  --color-surface-low: #18191b;
+  --color-surface-card: #1c1d1f;
+  --color-surface-high: #242629;
+  
+  --color-primary: #ccff80;
+  --color-primary-container: #a3e635;
+  --color-primary-dim: #98da27;
+  --color-on-primary: #121f00;
+
+  --color-secondary: #5de6ff;
+  --color-secondary-container: #00cbe6;
+  --color-secondary-dim: #2fd9f4;
+  --color-on-secondary: #00363e;
+
+  --color-alert: #ffb4ab;
+  --color-alert-container: #ff5449;
+  --color-alert-dark: #93000a;
+
+  --color-warning: #fbbf24;
+  --color-warning-dark: #78350f;
+
+  --font-display: "Poppins", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "Space Mono", monospace, ui-monospace, SFMono-Regular;
+}
+
+/* Custom Tactical Glassmorphism & Neumorphism */
+.glass-panel {
+  background: rgba(22, 24, 28, 0.7);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+}
+
+.glass-panel-glow {
+  background: rgba(20, 22, 25, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(163, 230, 53, 0.2);
+  box-shadow: 0 0 25px -5px rgba(163, 230, 53, 0.1), inset 0 1px 0 0 rgba(163, 230, 53, 0.15);
+}
+
+.neu-button {
+  background: linear-gradient(145deg, #1c1d21, #131417);
+  box-shadow: 4px 4px 10px rgba(0, 0, 0, 0.6), -2px -2px 6px rgba(255, 255, 255, 0.05);
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.neu-button:hover {
+  box-shadow: 5px 5px 12px rgba(0, 0, 0, 0.7), -2px -2px 8px rgba(255, 255, 255, 0.09);
+}
+
+.neu-button:active, .neu-button.active {
+  background: linear-gradient(145deg, #101113, #18191c);
+  box-shadow: inset 3px 3px 6px rgba(0, 0, 0, 0.8), inset -2px -2px 5px rgba(255, 255, 255, 0.04);
+}
+
+.neu-button-stop {
+  background: radial-gradient(circle at center, rgba(255, 84, 73, 0.22) 0%, rgba(147, 0, 10, 0.15) 70%);
+  border: 2px solid rgba(255, 180, 171, 0.5);
+  box-shadow: 0 0 25px rgba(255, 84, 73, 0.35), inset 0 0 15px rgba(255, 84, 73, 0.2);
+  transition: all 0.15s ease;
+}
+
+.neu-button-stop:hover {
+  background: radial-gradient(circle at center, rgba(255, 84, 73, 0.35) 0%, rgba(147, 0, 10, 0.28) 70%);
+  border-color: #ffb4ab;
+  box-shadow: 0 0 35px rgba(255, 84, 73, 0.6), inset 0 0 20px rgba(255, 84, 73, 0.4);
+}
+
+.neu-button-stop:active {
+  transform: scale(0.96);
+  box-shadow: 0 0 15px rgba(255, 84, 73, 0.4), inset 0 0 25px rgba(255, 84, 73, 0.6);
+}
+
+/* CRT and Scanline Filter */
+.scanlines {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0),
+    rgba(255, 255, 255, 0) 50%,
+    rgba(0, 0, 0, 0.35) 50%,
+    rgba(0, 0, 0, 0.35)
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+.vignette {
+  box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.9), inset 0 0 30px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+}
+
+/* HUD Corner Brackets */
+.hud-border {
+  border: 1px solid rgba(163, 230, 53, 0.25);
+  position: relative;
+}
+
+.hud-border::before,
+.hud-border::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #a3e635;
+  pointer-events: none;
+}
+
+.hud-border::before {
+  top: -1px;
+  left: -1px;
+  border-right: none;
+  border-bottom: none;
+}
+
+.hud-border::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: none;
+  border-top: none;
+}
+
+/* Graph Grid Pattern */
+.graph-grid {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Radar Sweep Animation */
+@keyframes sweep {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes scan-line {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(1000%); }
+}
+
+.animate-sweep {
+  animation: sweep 4s linear infinite;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(10, 10, 12, 0.6);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(163, 230, 53, 0.4);
+}

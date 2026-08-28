@@ -1,0 +1,7 @@
+{
+  "name": "PIPEVISION - ROV Telemetry Dashboard",
+  "description": "Subterranean inspection robot telemetry dashboard with live HUD camera feed, 6-axis MPU6050 IMU sensor telemetry, CO2 gas monitoring, and tactile ROV joystick console.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
