@@ -17,6 +17,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route
+          path="/missions/:missionId/live"
+          element={<LiveInspection />}
+        />
+
         <Route element={<AppShell />}>
           <Route
             path="/"
@@ -41,11 +46,6 @@ function App() {
           <Route
             path="/missions/:missionId"
             element={<MissionDetail />}
-          />
-
-          <Route
-            path="/missions/:missionId/live"
-            element={<LiveInspection />}
           />
 
           <Route
