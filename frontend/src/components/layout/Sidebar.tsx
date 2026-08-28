@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 
 const links = [
   { label: "Dashboard", to: "/dashboard" },
+  { label: "Live Cockpit", to: "/missions/M-104/live" },
   { label: "Missions", to: "/missions" },
 ];
 
