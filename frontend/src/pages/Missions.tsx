@@ -135,7 +135,7 @@ export default function Missions() {
               onClick={() => setStatusFilter(st)}
               className={`px-3 py-1.5 rounded-md text-xs font-['Space_Mono'] font-bold transition-all cursor-pointer ${
                 statusFilter === st
-                  ? 'bg-[#5de6ff] text-[#001f25] shadow-[0_0_10px_#5de6ff]'
+                  ? 'bg-[#a3e635] text-black shadow-[0_0_10px_#a3e635]'
                   : 'bg-[#071314] text-[#649c96] hover:text-white border border-[#173838]'
               }`}
             >

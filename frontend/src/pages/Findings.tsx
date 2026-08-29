@@ -202,7 +202,7 @@ export default function Findings() {
               onClick={() => setSeverityFilter(sev)}
               className={`px-2.5 py-1 rounded text-xs font-['Space_Mono'] font-bold transition-all cursor-pointer ${
                 severityFilter === sev
-                  ? 'bg-[#5de6ff] text-[#001f25]'
+                  ? 'bg-[#a3e635] text-black shadow-[0_0_10px_#a3e635]'
                   : 'bg-[#071314] text-[#649c96] hover:text-white border border-[#173838]'
               }`}
             >

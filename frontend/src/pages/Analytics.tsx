@@ -225,7 +225,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 onClick={() => setTimeRange(t)}
                 className={`font-['Space_Mono'] text-xs px-3.5 py-1.5 rounded transition-colors ${
                   timeRange === t
-                    ? 'text-[#ccff80] bg-white/10 border border-white/10 font-bold'
+                    ? 'bg-[#a3e635] text-black font-bold shadow-[0_0_10px_#a3e635]'
                     : 'text-[#c2cab0] hover:text-[#e5e2e1]'
                 }`}
               >
@@ -779,7 +779,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                         onClick={() => setLifecycleState(st)}
                         className={`font-['Space_Mono'] text-xs px-3.5 py-1.5 rounded transition-all cursor-pointer ${
                           isActive
-                            ? 'bg-[#5de6ff] text-[#001f25] font-black shadow-[0_0_12px_#5de6ff]'
+                            ? 'bg-[#a3e635] text-black font-bold shadow-[0_0_12px_#a3e635]'
                             : 'bg-[#0e2425] text-[#7eb3ad] hover:text-white hover:bg-[#153837] border border-[#1b3b3a]'
                         }`}
                       >
