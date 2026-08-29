@@ -45,6 +45,10 @@ export const ControlConsole: React.FC<ControlConsoleProps> = ({
             <span className="w-2 h-2 rounded-full bg-[#eab308] shadow-[0_0_8px_#eab308]" />
             <span className="text-[#eab308] font-bold">CONNECTION: CONNECTED</span>
           </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-[#5de6ff] font-bold">DIST: {robotState.distanceTraveledM.toFixed(1)}m</span>
+          </div>
         </div>
       </div>
 

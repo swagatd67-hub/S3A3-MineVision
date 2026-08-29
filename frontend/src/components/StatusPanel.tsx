@@ -17,11 +17,17 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
       id="status-panel"
       className="bg-[#141619] rounded-xl p-4 sm:p-5 flex items-center justify-between gap-4 border border-white/10 shadow-lg"
     >
-      {/* Ready Status */}
-      <div className="flex items-center gap-2.5">
-        <span className="w-2.5 h-2.5 rounded-full bg-[#a3e635] shadow-[0_0_8px_#a3e635]" />
-        <span className="font-['Space_Mono'] text-xs sm:text-sm font-bold text-[#ccff80] tracking-wider uppercase">
-          {robotState.isReady ? 'ROBOT: READY' : 'ROBOT: STANDBY'}
+      {/* Ready Status & Live Distance */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#a3e635] shadow-[0_0_8px_#a3e635]" />
+          <span className="font-['Space_Mono'] text-xs sm:text-sm font-bold text-[#ccff80] tracking-wider uppercase">
+            {robotState.isReady ? 'ROBOT: READY' : 'ROBOT: STANDBY'}
+          </span>
+        </div>
+        <span className="text-white/30 text-xs">•</span>
+        <span className="font-['Space_Mono'] text-xs sm:text-sm font-bold text-[#5de6ff] tracking-wider">
+          {robotState.distanceTraveledM.toFixed(1)}m
         </span>
       </div>
 
