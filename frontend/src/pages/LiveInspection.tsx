@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { CameraFeed } from '../components/CameraFeed';
 import { ControlConsole } from '../components/ControlConsole';
 import { StatusPanel } from '../components/StatusPanel';
@@ -15,6 +16,7 @@ import { MissionLogsView } from '../components/MissionLogsView';
 import { HelpView } from '../components/HelpView';
 import { playSound } from '../utils/audio';
 
+import { telemetryWsClient } from '../api/telemetryWs';
 import type {
   RobotDriveState,
   DriveCommand,
@@ -24,8 +26,14 @@ import type {
   SnapshotItem,
   CameraId,
 } from '../types';
+import type {
+  TelemetryData,
+  WebSocketConnectionStatus,
+} from '../types/telemetry';
 
 export default function LiveInspection() {
+  const { missionId = 'M-104' } = useParams<{ missionId?: string }>();
+
   // Navigation tab state
   const [activeTab, setActiveTab] = useState<ActiveNavTab>('telemetry');
 
@@ -39,6 +47,24 @@ export default function LiveInspection() {
   const [recordSeconds, setRecordSeconds] = useState(148);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [, setLightIntensity] = useState(85);
+
+  // WebSocket Connection State & Telemetry
+  const [wsStatus, setWsStatus] = useState<WebSocketConnectionStatus>('DISCONNECTED');
+  const [activeRobotId, setActiveRobotId] = useState<string>('ROV-01');
+
+  // Pressure & Water Quality Real Telemetry State
+  const [pressureData, setPressureData] = useState({
+    body_kpa: 101.3,
+    front_anchor_kpa: 180.0,
+    rear_anchor_kpa: 175.0,
+  });
+
+  const [waterData, setWaterData] = useState({
+    temperature_c: 22.5,
+    ph: 7.2,
+    conductivity_ms_cm: 1.4,
+    turbidity_ntu: 15.0,
+  });
 
   // Robot State
   const [robotState, setRobotState] = useState<RobotDriveState>({
@@ -56,7 +82,7 @@ export default function LiveInspection() {
     emergencyStop: false,
   });
 
-  // Sensor Data
+  // Sensor Data (CO2 Local Simulated)
   const [sensorData] = useState<SensorData>(() => ({
     co2Ppm: 420,
     co2BaselinePpm: 400,
@@ -66,7 +92,7 @@ export default function LiveInspection() {
   }));
 
   // IMU Data
-  const [imuData] = useState<IMUData>({
+  const [imuData, setImuData] = useState<IMUData>({
     accel: { x: 0.02, y: -0.01, z: 0.98 },
     accelX: 0.02,
     accelY: -0.01,
@@ -123,6 +149,136 @@ export default function LiveInspection() {
       defectCount: 2,
     },
   ]);
+
+  // Buffer and throttled rendering refs
+  const latestTelemetryPacketRef = useRef<TelemetryData | null>(null);
+  const lastTimestampMsRef = useRef<number>(0);
+  const rafIdRef = useRef<number | null>(null);
+
+  // WebSocket lifecycle & event listener binding
+  useEffect(() => {
+    lastTimestampMsRef.current = 0;
+    latestTelemetryPacketRef.current = null;
+
+    const unsubStatus = telemetryWsClient.onStatusChange((status) => {
+      setWsStatus(status);
+    });
+
+    const unsubTelemetry = telemetryWsClient.onTelemetry((event) => {
+      const packet = event.data;
+      if (!packet) return;
+
+      // Mission filtering: only accept if mission_id matches active route mission
+      if (packet.mission_id && packet.mission_id !== missionId) {
+        return;
+      }
+
+      // Stale packet check: ignore out-of-order/older packets
+      const packetTimeMs = packet.timestamp ? Date.parse(packet.timestamp) : Date.now();
+      if (packetTimeMs < lastTimestampMsRef.current) {
+        return;
+      }
+      lastTimestampMsRef.current = packetTimeMs;
+
+      latestTelemetryPacketRef.current = packet;
+    });
+
+    const unsubAnalytics = telemetryWsClient.onAnalytics((event) => {
+      if (event.mission_id && event.mission_id !== missionId) return;
+      // Analytics update received safely
+    });
+
+    telemetryWsClient.connect();
+
+    // Throttled frame loop (~20 FPS / 50ms) to prevent React state render storms
+    let lastRenderTime = 0;
+    const updateLoop = (now: number) => {
+      if (now - lastRenderTime >= 50) {
+        if (latestTelemetryPacketRef.current) {
+          const data = latestTelemetryPacketRef.current;
+          latestTelemetryPacketRef.current = null;
+
+          if (data.robot_id) {
+            setActiveRobotId(data.robot_id);
+          }
+
+          setRobotState((prev) => {
+            const updated = { ...prev };
+            if (typeof data.battery_percent === 'number') {
+              updated.batteryPercent = data.battery_percent;
+            }
+            if (typeof data.distance_m === 'number') {
+              updated.distanceTraveledM = data.distance_m;
+            }
+            if (data.state) {
+              updated.isReady =
+                data.state === 'INSPECTING' || data.state === 'IDLE' || data.state === 'READY';
+            }
+            return updated;
+          });
+
+          if (data.imu) {
+            const { ax, ay, az, gx, gy, gz } = data.imu;
+            const pitchRad = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
+            const rollRad = Math.atan2(ay, az);
+            const pitchDeg = pitchRad * (180 / Math.PI);
+            const rollDeg = rollRad * (180 / Math.PI);
+
+            setImuData((prev) => ({
+              ...prev,
+              accel: { x: ax, y: ay, z: az },
+              accelX: ax,
+              accelY: ay,
+              accelZ: az,
+              gyro: { x: gx, y: gy, z: gz },
+              gyroX: gx,
+              gyroY: gy,
+              gyroZ: gz,
+              pitchDeg,
+              rollDeg,
+              // Yaw is NOT derived from accelerometer; preserving existing yaw value
+              orientation: {
+                pitch: pitchDeg,
+                roll: rollDeg,
+                yaw: prev.yawDeg,
+              },
+            }));
+          }
+
+          if (data.pressure) {
+            setPressureData({
+              body_kpa: data.pressure.body_kpa ?? 101.3,
+              front_anchor_kpa: data.pressure.front_anchor_kpa ?? 180.0,
+              rear_anchor_kpa: data.pressure.rear_anchor_kpa ?? 175.0,
+            });
+          }
+
+          if (data.water) {
+            setWaterData({
+              temperature_c: data.water.temperature_c ?? 22.5,
+              ph: data.water.ph ?? 7.2,
+              conductivity_ms_cm: data.water.conductivity_ms_cm ?? 1.4,
+              turbidity_ntu: data.water.turbidity_ntu ?? 15.0,
+            });
+          }
+        }
+        lastRenderTime = now;
+      }
+      rafIdRef.current = requestAnimationFrame(updateLoop);
+    };
+
+    rafIdRef.current = requestAnimationFrame(updateLoop);
+
+    return () => {
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+      }
+      unsubStatus();
+      unsubTelemetry();
+      unsubAnalytics();
+      telemetryWsClient.disconnect();
+    };
+  }, [missionId]);
 
   // Recording Timer
   useEffect(() => {
@@ -238,13 +394,37 @@ export default function LiveInspection() {
           {/* Telemetry View */}
           {activeTab === 'telemetry' && (
             <div className="flex flex-col gap-6 w-full animate-fade-in">
-              {/* Header Bar */}
+              {/* Header Bar with Real WebSocket Telemetry Connection Status */}
               <div className="flex flex-wrap items-center justify-between gap-4 bg-[#141619] p-4 rounded-xl border border-white/10 shadow-lg">
                 <div className="flex items-center gap-3">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#a3e635] animate-pulse shadow-[0_0_8px_#a3e635]" />
-                  <h2 className="font-['Poppins'] text-lg font-bold tracking-wide uppercase text-white">
-                    ROV-01 Tactical Inspection Cockpit
-                  </h2>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full ${
+                      wsStatus === 'CONNECTED'
+                        ? 'bg-[#a3e635] animate-pulse shadow-[0_0_8px_#a3e635]'
+                        : wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING'
+                        ? 'bg-[#ffb4ab] animate-ping'
+                        : 'bg-[#ff5449]'
+                    }`}
+                  />
+                  <div>
+                    <h2 className="font-['Poppins'] text-lg font-bold tracking-wide uppercase text-white">
+                      {activeRobotId} Tactical Inspection Cockpit
+                    </h2>
+                    <p className="font-['Space_Mono'] text-[10px] text-[#649c96]">
+                      Mission: <span className="text-[#5de6ff] font-bold">{missionId}</span> • WS Telemetry:{' '}
+                      <span
+                        className={`font-bold uppercase ${
+                          wsStatus === 'CONNECTED'
+                            ? 'text-[#a3e635]'
+                            : wsStatus === 'CONNECTING' || wsStatus === 'RECONNECTING'
+                            ? 'text-[#ffb4ab]'
+                            : 'text-[#ff5449]'
+                        }`}
+                      >
+                        {wsStatus}
+                      </span>
+                    </p>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -316,8 +496,60 @@ export default function LiveInspection() {
                     onChangeLightIntensity={setLightIntensity}
                   />
 
-                  {/* Gas Sensor Panel Component */}
-                  <CO2SensorPanel gasData={sensorData} />
+                  {/* Real Water Quality & Pressure Telemetry Panel */}
+                  <div className="bg-[#141619] rounded-xl p-4 sm:p-5 flex flex-col gap-3 border border-white/10 shadow-lg">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                      <span className="font-['Space_Mono'] text-xs font-bold text-[#5de6ff] tracking-widest uppercase">
+                        REAL TELEMETRY SENSORS
+                      </span>
+                      <span className="text-[10px] font-['Space_Mono'] text-[#a3e635] font-bold">
+                        WS LIVE
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 font-['Space_Mono'] text-xs">
+                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
+                        <span className="text-[10px] text-[#649c96]">Water Temp</span>
+                        <span className="text-white font-bold">{waterData.temperature_c.toFixed(1)} °C</span>
+                      </div>
+                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
+                        <span className="text-[10px] text-[#649c96]">pH Level</span>
+                        <span className="text-white font-bold">{waterData.ph.toFixed(2)}</span>
+                      </div>
+                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
+                        <span className="text-[10px] text-[#649c96]">Conductivity</span>
+                        <span className="text-white font-bold">{waterData.conductivity_ms_cm.toFixed(1)} mS/cm</span>
+                      </div>
+                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
+                        <span className="text-[10px] text-[#649c96]">Turbidity</span>
+                        <span className="text-white font-bold">{waterData.turbidity_ntu.toFixed(1)} NTU</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-1 pt-2 border-t border-white/10 grid grid-cols-3 gap-2 text-center font-['Space_Mono'] text-[11px]">
+                      <div className="bg-black/30 p-1.5 rounded">
+                        <span className="text-[9px] text-[#649c96] block">Body Pressure</span>
+                        <span className="text-[#a3e635] font-bold">{pressureData.body_kpa.toFixed(0)} kPa</span>
+                      </div>
+                      <div className="bg-black/30 p-1.5 rounded">
+                        <span className="text-[9px] text-[#649c96] block">Front Anchor</span>
+                        <span className="text-[#5de6ff] font-bold">{pressureData.front_anchor_kpa.toFixed(0)} kPa</span>
+                      </div>
+                      <div className="bg-black/30 p-1.5 rounded">
+                        <span className="text-[9px] text-[#649c96] block">Rear Anchor</span>
+                        <span className="text-[#ffb4ab] font-bold">{pressureData.rear_anchor_kpa.toFixed(0)} kPa</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Gas Sensor Panel Component (CO2 Local Demo Sensor) */}
+                  <div>
+                    <div className="text-[10px] font-['Space_Mono'] text-[#649c96] mb-1 px-1 flex justify-between items-center">
+                      <span>GAS MONITORING</span>
+                      <span className="text-amber-400/80 font-bold">(LOCAL DEMO SENSOR)</span>
+                    </div>
+                    <CO2SensorPanel gasData={sensorData} />
+                  </div>
 
                   {/* IMU Sensor Panel Component */}
                   <MPU6050Panel imuData={imuData} />
