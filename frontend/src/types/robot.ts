@@ -13,3 +13,10 @@ export interface RobotState {
   camera_online?: boolean;
   sensors_online?: boolean;
 }
+
+export interface RobotInfo {
+  robot_id: string;
+  name: string;
+  firmware_version: string;
+  capabilities: string[];
+}
