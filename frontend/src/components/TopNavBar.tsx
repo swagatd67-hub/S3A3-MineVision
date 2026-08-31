@@ -37,7 +37,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
         >
           PIPEVISION
         </Link>
-        <span className="font-['Space_Mono'] text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded border border-white/10 hidden md:inline">
+        <span className="font-['Inter'] text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded border border-white/10 hidden md:inline">
           LIVE COCKPIT
         </span>
       </div>
@@ -46,14 +46,14 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
       <div className="flex items-center gap-4 sm:gap-6">
         {/* Connected Indicator */}
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-[#a3e635] shadow-[0_0_8px_#a3e635]" />
-          <span className="font-['Space_Mono'] text-xs font-bold text-[#ccff80] tracking-wider hidden sm:inline">
+          <span className="w-2 h-2 rounded-full bg-[#CCFF80]" />
+          <span className="font-['Inter'] text-xs font-bold text-[#CCFF80] tracking-wider hidden sm:inline">
             CONNECTED ({robotState.batteryPercent}%)
           </span>
         </div>
 
         {/* Camera Status */}
-        <div className="flex items-center gap-2 text-xs font-['Space_Mono'] text-white/70">
+        <div className="flex items-center gap-2 text-xs font-['Inter'] text-white/70">
           <Video className="w-4 h-4 text-white/60" />
           <span className="hidden sm:inline">CAMERA:</span>
           <span className="text-white font-semibold">OK</span>
