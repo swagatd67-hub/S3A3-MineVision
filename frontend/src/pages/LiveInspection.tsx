@@ -17,6 +17,8 @@ import { HelpView } from '../components/HelpView';
 import { playSound } from '../utils/audio';
 
 import { telemetryWsClient } from '../api/telemetryWs';
+import { getMission } from '../api/missions';
+import { sendRobotCommand, sendEmergencyStop } from '../api/robot';
 import {
   listFrames,
   createSnapshot,
@@ -76,6 +78,7 @@ export default function LiveInspection() {
   // WebSocket Connection State & Telemetry
   const [wsStatus, setWsStatus] = useState<WebSocketConnectionStatus>('DISCONNECTED');
   const [activeRobotId, setActiveRobotId] = useState<string>('ROV-01');
+  const [missionRobotId, setMissionRobotId] = useState<string>('ROV-01');
 
   // Pressure & Water Quality Real Telemetry State
   const [pressureData, setPressureData] = useState({
@@ -162,6 +165,27 @@ export default function LiveInspection() {
       bounding: { x: 60, y: 55, width: 25, height: 25 },
     },
   ]);
+
+  // Active Key Ref for Deadman Keyup / Deduplication Safety
+  const activeKeyRef = useRef<string | null>(null);
+
+  // Determine Real Robot ID from Mission Backend
+  useEffect(() => {
+    let isMounted = true;
+    getMission(missionId)
+      .then((m) => {
+        if (isMounted && m.robot_id) {
+          setMissionRobotId(m.robot_id);
+          setActiveRobotId(m.robot_id);
+        }
+      })
+      .catch((err) => {
+        console.warn(`Could not resolve robot_id for mission ${missionId}:`, err);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [missionId]);
 
   // Load Real Backend Snapshots
   const fetchSnapshotsList = useCallback(async () => {
@@ -375,6 +399,8 @@ export default function LiveInspection() {
               updated.distanceTraveledM = data.distance_m;
             }
             if (data.state) {
+              const isEstop = data.state === 'EMERGENCY_STOP';
+              updated.emergencyStop = isEstop;
               updated.isReady =
                 data.state === 'INSPECTING' || data.state === 'IDLE' || data.state === 'READY';
             }
@@ -443,60 +469,174 @@ export default function LiveInspection() {
     };
   }, [missionId]);
 
-  // Driving & Controls Handlers
+  // Real Robot Driving & Command Handlers
   const handleDriveCommand = useCallback(
-    (command: DriveCommand) => {
-      setRobotState((prev) => {
-        const speed = command === 'IDLE' ? 0 : prev.gear === 'CRAWL' ? 30 : prev.gear === 'CRUISE' ? 65 : 100;
-        return { ...prev, command, direction: command, speed };
-      });
-      if (!isSoundMuted) playSound('click');
+    async (command: DriveCommand) => {
+      if (robotState.emergencyStop) {
+        setSnapshotMessage('Robot is in EMERGENCY STOP state. Commands rejected.');
+        setTimeout(() => setSnapshotMessage(null), 4000);
+        return;
+      }
+
+      const targetRobotId = activeRobotId || missionRobotId || 'ROV-01';
+
+      if (command === 'IDLE') {
+        try {
+          const res = await sendRobotCommand(targetRobotId, { name: 'STOP' }, missionId);
+          setRobotState((prev) => ({
+            ...prev,
+            command: 'IDLE',
+            direction: 'IDLE',
+            speed: 0,
+            isReady: res.controller_state !== 'EMERGENCY_STOP',
+          }));
+        } catch (err: unknown) {
+          console.error('Failed to send STOP command:', err);
+          const detail = err instanceof Error ? err.message : 'STOP command failed';
+          setSnapshotMessage(`STOP Error: ${detail}`);
+          setTimeout(() => setSnapshotMessage(null), 4000);
+        }
+        return;
+      }
+
+      const gearSpeed = robotState.gear === 'CRAWL' ? 0.3 : robotState.gear === 'CRUISE' ? 0.6 : 1.0;
+      let linear = 0.0;
+      let angular = 0.0;
+
+      if (command === 'FORWARD') linear = gearSpeed;
+      else if (command === 'BACKWARD') linear = -gearSpeed;
+      else if (command === 'LEFT') angular = -1.0;
+      else if (command === 'RIGHT') angular = 1.0;
+
+      try {
+        if (!isSoundMuted) playSound('click');
+        const res = await sendRobotCommand(
+          targetRobotId,
+          { name: 'MOVE', arguments: { linear, angular } },
+          missionId
+        );
+        const speedPercent = Math.round(gearSpeed * 100);
+        setRobotState((prev) => ({
+          ...prev,
+          command,
+          direction: command,
+          speed: speedPercent,
+          isReady: res.controller_state !== 'EMERGENCY_STOP',
+        }));
+      } catch (err: unknown) {
+        console.error(`Failed to send MOVE command (${command}):`, err);
+        const detail = err instanceof Error ? err.message : `Command ${command} failed`;
+        setSnapshotMessage(`Command Error: ${detail}`);
+        setTimeout(() => setSnapshotMessage(null), 4000);
+
+        if (detail.includes('EMERGENCY_STOP') || detail.includes('safety')) {
+          setRobotState((prev) => ({
+            ...prev,
+            emergencyStop: true,
+            isReady: false,
+            speed: 0,
+            command: 'IDLE',
+          }));
+        }
+      }
     },
-    [isSoundMuted]
+    [robotState.emergencyStop, robotState.gear, activeRobotId, missionRobotId, missionId, isSoundMuted]
   );
 
+  // Real Emergency Stop Handler
+  const handleEmergencyStop = useCallback(async () => {
+    const targetRobotId = activeRobotId || missionRobotId || 'ROV-01';
+    try {
+      if (!isSoundMuted) playSound('stop');
+      const res = await sendEmergencyStop(targetRobotId, missionId);
+      setRobotState((prev) => ({
+        ...prev,
+        command: 'IDLE',
+        direction: 'IDLE',
+        speed: 0,
+        emergencyStop: true,
+        isReady: false,
+      }));
+      setSnapshotMessage(`EMERGENCY STOP EXECUTED (${res.controller_state})`);
+      setTimeout(() => setSnapshotMessage(null), 5000);
+    } catch (err: unknown) {
+      console.error('Failed to send E-STOP:', err);
+      const detail = err instanceof Error ? err.message : 'E-STOP failed';
+      setSnapshotMessage(`E-STOP Error: ${detail}`);
+      setTimeout(() => setSnapshotMessage(null), 4000);
+    }
+  }, [activeRobotId, missionRobotId, missionId, isSoundMuted]);
+
+  // Local Lights Toggle
   const handleToggleLights = useCallback(() => {
     setRobotState((prev) => ({ ...prev, lightsOn: !prev.lightsOn }));
     if (!isSoundMuted) playSound('click');
   }, [isSoundMuted]);
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts & Deadman Keyup Safety Listener
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) return;
+    const isEditableElement = (el: HTMLElement | null): boolean => {
+      if (!el) return false;
+      const tagName = el.tagName?.toUpperCase();
+      return (
+        tagName === 'INPUT' ||
+        tagName === 'TEXTAREA' ||
+        tagName === 'SELECT' ||
+        el.isContentEditable
+      );
+    };
 
-      switch (e.key.toLowerCase()) {
-        case 'w':
-        case 'arrowup':
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isEditableElement(e.target as HTMLElement)) return;
+      if (e.repeat) return;
+
+      const key = e.key.toLowerCase();
+
+      if (key === ' ') {
+        e.preventDefault();
+        handleEmergencyStop();
+        return;
+      }
+
+      if (robotState.emergencyStop) return;
+
+      if (['w', 'arrowup', 's', 'arrowdown', 'a', 'arrowleft', 'd', 'arrowright'].includes(key)) {
+        if (activeKeyRef.current === key) return;
+        activeKeyRef.current = key;
+
+        if (key === 'w' || key === 'arrowup') {
           handleDriveCommand('FORWARD');
-          break;
-        case 's':
-        case 'arrowdown':
+        } else if (key === 's' || key === 'arrowdown') {
           handleDriveCommand('BACKWARD');
-          break;
-        case 'a':
-        case 'arrowleft':
+        } else if (key === 'a' || key === 'arrowleft') {
           handleDriveCommand('LEFT');
-          break;
-        case 'd':
-        case 'arrowright':
+        } else if (key === 'd' || key === 'arrowright') {
           handleDriveCommand('RIGHT');
-          break;
-        case ' ':
-          e.preventDefault();
+        }
+      } else if (key === 'l') {
+        handleToggleLights();
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (isEditableElement(e.target as HTMLElement)) return;
+
+      const key = e.key.toLowerCase();
+      if (['w', 'arrowup', 's', 'arrowdown', 'a', 'arrowleft', 'd', 'arrowright'].includes(key)) {
+        if (activeKeyRef.current === key || activeKeyRef.current !== null) {
+          activeKeyRef.current = null;
           handleDriveCommand('IDLE');
-          break;
-        case 'l':
-          handleToggleLights();
-          break;
-        default:
-          break;
+        }
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDriveCommand, handleToggleLights]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleDriveCommand, handleEmergencyStop, handleToggleLights, robotState.emergencyStop]);
 
   return (
     <div className="min-h-screen bg-[#0d0e0f] text-white flex flex-col font-['Inter'] selection:bg-[#a3e635] selection:text-black">
@@ -622,6 +762,7 @@ export default function LiveInspection() {
                     robotState={robotState}
                     onDrive={handleDriveCommand}
                     onStop={() => handleDriveCommand('IDLE')}
+                    onEmergencyStop={handleEmergencyStop}
                     onChangeThrottle={(speed) => setRobotState((prev) => ({ ...prev, speed }))}
                     onChangeGear={(gear) => setRobotState((prev) => ({ ...prev, gear }))}
                   />
