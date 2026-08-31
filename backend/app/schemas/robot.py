@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,3 +26,16 @@ class RobotRegistrationResponse(BaseModel):
     robot_id: str
     status: Literal["registered"]
     capabilities: list[RobotCapability]
+
+
+class RobotCommandRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=64, description="Command name, e.g. MOVE, STOP, EMERGENCY_STOP, CAMERA_PAN")
+    arguments: dict[str, Any] | None = Field(default=None, description="Command arguments dictionary")
+
+
+class RobotCommandResponse(BaseModel):
+    robot_id: str
+    command: str
+    status: Literal["accepted", "rejected"]
+    controller_state: str
+    timestamp: str
