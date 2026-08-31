@@ -17,15 +17,27 @@ import { HelpView } from '../components/HelpView';
 import { playSound } from '../utils/audio';
 
 import { telemetryWsClient } from '../api/telemetryWs';
+import {
+  listFrames,
+  createSnapshot,
+  listSnapshots,
+  deleteSnapshot,
+  startRecording,
+  stopRecording,
+  getRecordingStatus,
+} from '../api/video';
 import type {
   RobotDriveState,
   DriveCommand,
   SensorData,
   IMUData,
   DefectDetection,
-  SnapshotItem,
   CameraId,
 } from '../types';
+import type {
+  SnapshotRecord,
+  RecordingSession,
+} from '../types/video';
 import type {
   TelemetryData,
   WebSocketConnectionStatus,
@@ -41,12 +53,25 @@ export default function LiveInspection() {
   const [isSnapshotDrawerOpen, setIsSnapshotDrawerOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
-  // System controls & state
+  // System controls & camera state
   const [activeCamera, setActiveCamera] = useState<CameraId>('cam-01');
-  const [isRecording, setIsRecording] = useState(true);
-  const [recordSeconds, setRecordSeconds] = useState(148);
   const [isSoundMuted, setIsSoundMuted] = useState(false);
   const [, setLightIntensity] = useState(85);
+
+  // Recording State (Backend Authoritative)
+  const [recordingStatus, setRecordingStatus] = useState<
+    'IDLE' | 'STARTING' | 'RECORDING' | 'STOPPING' | 'ERROR'
+  >('IDLE');
+  const [activeRecordingSession, setActiveRecordingSession] = useState<RecordingSession | null>(
+    null
+  );
+  const [recordSeconds, setRecordSeconds] = useState(0);
+
+  // Real Snapshot State
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([]);
+  const [snapshotsLoading, setSnapshotsLoading] = useState(false);
+  const [snapshotsError, setSnapshotsError] = useState<string | null>(null);
+  const [snapshotMessage, setSnapshotMessage] = useState<string | null>(null);
 
   // WebSocket Connection State & Telemetry
   const [wsStatus, setWsStatus] = useState<WebSocketConnectionStatus>('DISCONNECTED');
@@ -138,24 +163,167 @@ export default function LiveInspection() {
     },
   ]);
 
-  // Snapshots
-  const [snapshots, setSnapshots] = useState<SnapshotItem[]>([
-    {
-      id: 'SNAP-001',
-      imageUrl: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=800&q=80',
-      timestamp: '14:25:40',
-      cameraName: 'CAM 01 (FRONT)',
-      distanceM: 142.8,
-      defectCount: 2,
-    },
-  ]);
+  // Load Real Backend Snapshots
+  const fetchSnapshotsList = useCallback(async () => {
+    setSnapshotsLoading(true);
+    setSnapshotsError(null);
+    try {
+      const res = await listSnapshots(missionId);
+      setSnapshots(res.snapshots);
+    } catch (err: unknown) {
+      console.error(`Failed to load snapshots for mission ${missionId}:`, err);
+      setSnapshotsError(`Snapshots could not be loaded for mission '${missionId}'.`);
+    } finally {
+      setSnapshotsLoading(false);
+    }
+  }, [missionId]);
 
-  // Buffer and throttled rendering refs
+  useEffect(() => {
+    let isMounted = true;
+    listSnapshots(missionId)
+      .then((res) => {
+        if (isMounted) {
+          setSnapshots(res.snapshots);
+          setSnapshotsError(null);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error(`Failed to load snapshots for mission ${missionId}:`, err);
+          setSnapshotsError(`Snapshots could not be loaded for mission '${missionId}'.`);
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [missionId]);
+
+  // Load Initial Recording Status from Backend
+  useEffect(() => {
+    let isMounted = true;
+    getRecordingStatus(missionId)
+      .then((statusRes) => {
+        if (!isMounted) return;
+        if (statusRes.is_recording && statusRes.session) {
+          setRecordingStatus('RECORDING');
+          setActiveRecordingSession(statusRes.session);
+          if (statusRes.session.start_time) {
+            const startMs = Date.parse(statusRes.session.start_time);
+            const elapsed = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            setRecordSeconds(elapsed);
+          }
+        } else {
+          setRecordingStatus('IDLE');
+          setActiveRecordingSession(null);
+          setRecordSeconds(0);
+        }
+      })
+      .catch((err) => {
+        if (isMounted) {
+          console.error(`Failed to fetch recording status for mission ${missionId}:`, err);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [missionId]);
+
+  // Recording Timer
+  useEffect(() => {
+    let timer: number;
+    if (recordingStatus === 'RECORDING') {
+      timer = window.setInterval(() => {
+        setRecordSeconds((prev) => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [recordingStatus]);
+
+  // Real Recording Toggle Handler
+  const handleToggleRecording = useCallback(async () => {
+    if (recordingStatus === 'STARTING' || recordingStatus === 'STOPPING') return;
+
+    if (!isSoundMuted) playSound('click');
+
+    if (recordingStatus === 'RECORDING') {
+      setRecordingStatus('STOPPING');
+      try {
+        const session = await stopRecording(
+          missionId,
+          activeRecordingSession?.recording_id
+        );
+        setActiveRecordingSession(session);
+        setRecordingStatus('IDLE');
+      } catch (err) {
+        console.error(`Failed to stop recording for ${missionId}:`, err);
+        setRecordingStatus('ERROR');
+        setTimeout(() => setRecordingStatus('RECORDING'), 2500);
+      }
+    } else {
+      setRecordingStatus('STARTING');
+      try {
+        const session = await startRecording(missionId, activeCamera);
+        setActiveRecordingSession(session);
+        setRecordingStatus('RECORDING');
+        setRecordSeconds(0);
+      } catch (err) {
+        console.error(`Failed to start recording for ${missionId}:`, err);
+        setRecordingStatus('ERROR');
+        setTimeout(() => setRecordingStatus('IDLE'), 2500);
+      }
+    }
+  }, [recordingStatus, missionId, activeRecordingSession, activeCamera, isSoundMuted]);
+
+  // Real Snapshot Creation Handler (Using actual backend frame index)
+  const handleTakeSnapshot = useCallback(async () => {
+    if (!isSoundMuted) playSound('snapshot');
+    setSnapshotMessage(null);
+
+    try {
+      const framesRes = await listFrames(missionId, 1);
+      if (framesRes.count === 0 || framesRes.frames.length === 0) {
+        setSnapshotMessage('No current backend frame available.');
+        setTimeout(() => setSnapshotMessage(null), 4500);
+        return;
+      }
+
+      const latestFrame = framesRes.frames[0];
+      const newSnapshot = await createSnapshot(
+        missionId,
+        latestFrame.frame_index,
+        activeCamera,
+        `Captured during mission ${missionId}`
+      );
+
+      setSnapshots((prev) => [newSnapshot, ...prev]);
+      setIsSnapshotDrawerOpen(true);
+    } catch (err) {
+      console.error(`Failed to create snapshot for ${missionId}:`, err);
+      setSnapshotMessage('No current backend frame available.');
+      setTimeout(() => setSnapshotMessage(null), 4500);
+    }
+  }, [missionId, activeCamera, isSoundMuted]);
+
+  // Real Snapshot Deletion Handler
+  const handleDeleteSnapshot = useCallback(
+    async (snapshotId: string) => {
+      try {
+        await deleteSnapshot(missionId, snapshotId);
+        setSnapshots((prev) => prev.filter((s) => s.snapshot_id !== snapshotId));
+      } catch (err) {
+        console.error(`Failed to delete snapshot ${snapshotId}:`, err);
+      }
+    },
+    [missionId]
+  );
+
+  // Buffer and throttled rendering refs for telemetry
   const latestTelemetryPacketRef = useRef<TelemetryData | null>(null);
   const lastTimestampMsRef = useRef<number>(0);
   const rafIdRef = useRef<number | null>(null);
 
-  // WebSocket lifecycle & event listener binding
+  // WebSocket telemetry lifecycle
   useEffect(() => {
     lastTimestampMsRef.current = 0;
     latestTelemetryPacketRef.current = null;
@@ -168,12 +336,10 @@ export default function LiveInspection() {
       const packet = event.data;
       if (!packet) return;
 
-      // Mission filtering: only accept if mission_id matches active route mission
       if (packet.mission_id && packet.mission_id !== missionId) {
         return;
       }
 
-      // Stale packet check: ignore out-of-order/older packets
       const packetTimeMs = packet.timestamp ? Date.parse(packet.timestamp) : Date.now();
       if (packetTimeMs < lastTimestampMsRef.current) {
         return;
@@ -185,12 +351,10 @@ export default function LiveInspection() {
 
     const unsubAnalytics = telemetryWsClient.onAnalytics((event) => {
       if (event.mission_id && event.mission_id !== missionId) return;
-      // Analytics update received safely
     });
 
     telemetryWsClient.connect();
 
-    // Throttled frame loop (~20 FPS / 50ms) to prevent React state render storms
     let lastRenderTime = 0;
     const updateLoop = (now: number) => {
       if (now - lastRenderTime >= 50) {
@@ -236,7 +400,6 @@ export default function LiveInspection() {
               gyroZ: gz,
               pitchDeg,
               rollDeg,
-              // Yaw is NOT derived from accelerometer; preserving existing yaw value
               orientation: {
                 pitch: pitchDeg,
                 roll: rollDeg,
@@ -280,18 +443,7 @@ export default function LiveInspection() {
     };
   }, [missionId]);
 
-  // Recording Timer
-  useEffect(() => {
-    let timer: number;
-    if (isRecording) {
-      timer = window.setInterval(() => {
-        setRecordSeconds((prev) => prev + 1);
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [isRecording]);
-
-  // Handlers
+  // Driving & Controls Handlers
   const handleDriveCommand = useCallback(
     (command: DriveCommand) => {
       setRobotState((prev) => {
@@ -307,28 +459,6 @@ export default function LiveInspection() {
     setRobotState((prev) => ({ ...prev, lightsOn: !prev.lightsOn }));
     if (!isSoundMuted) playSound('click');
   }, [isSoundMuted]);
-
-  const handleToggleRecording = useCallback(() => {
-    setIsRecording((prev) => !prev);
-    if (!isSoundMuted) playSound('click');
-  }, [isSoundMuted]);
-
-  const handleTakeSnapshot = useCallback(() => {
-    const newSnap: SnapshotItem = {
-      id: `SNAP-00${snapshots.length + 1}`,
-      imageUrl: 'https://images.unsplash.com/photo-1541888946425-d0fbb186a5b7?auto=format&fit=crop&w=800&q=80',
-      timestamp: new Date().toLocaleTimeString('en-US', { hour12: false }),
-      cameraName: activeCamera.toUpperCase(),
-      distanceM: robotState.distanceTraveledM,
-      defectCount: defects.length,
-    };
-    setSnapshots((prev) => [newSnap, ...prev]);
-    if (!isSoundMuted) playSound('snapshot');
-  }, [snapshots.length, activeCamera, robotState.distanceTraveledM, defects.length, isSoundMuted]);
-
-  const handleDeleteSnapshot = useCallback((id: string) => {
-    setSnapshots((prev) => prev.filter((s) => s.id !== id));
-  }, []);
 
   // Keyboard Shortcuts
   useEffect(() => {
@@ -379,6 +509,14 @@ export default function LiveInspection() {
         onOpenGallery={() => setIsSnapshotDrawerOpen(true)}
         snapshotCount={snapshots.length}
       />
+
+      {/* Transient Notification Toast */}
+      {snapshotMessage && (
+        <div className="fixed top-20 right-6 z-50 bg-[#1f0f11] border border-[#ff5449]/50 text-[#ffb4ab] px-4 py-2 rounded-lg font-['Space_Mono'] text-xs shadow-2xl animate-fade-in flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#ff5449] animate-pulse" />
+          <span>{snapshotMessage}</span>
+        </div>
+      )}
 
       {/* Main Layout Container */}
       <div className="flex flex-1 pt-16 relative">
@@ -464,10 +602,12 @@ export default function LiveInspection() {
                 <div className="lg:col-span-2 flex flex-col gap-6">
                   {/* Camera Feed Component */}
                   <CameraFeed
+                    missionId={missionId}
                     robotState={robotState}
                     activeCamera={activeCamera}
                     onChangeCamera={setActiveCamera}
-                    isRecording={isRecording}
+                    isRecording={recordingStatus === 'RECORDING' || recordingStatus === 'STARTING' || recordingStatus === 'STOPPING'}
+                    recordingStatus={recordingStatus}
                     onToggleRecord={handleToggleRecording}
                     recordSeconds={recordSeconds}
                     onTakeSnapshot={handleTakeSnapshot}
@@ -595,8 +735,12 @@ export default function LiveInspection() {
       <SnapshotDrawer
         isOpen={isSnapshotDrawerOpen}
         onClose={() => setIsSnapshotDrawerOpen(false)}
+        missionId={missionId}
         snapshots={snapshots}
+        loading={snapshotsLoading}
+        error={snapshotsError}
         onDeleteSnapshot={handleDeleteSnapshot}
+        onRefreshSnapshots={fetchSnapshotsList}
       />
 
       {/* Settings Modal Component */}

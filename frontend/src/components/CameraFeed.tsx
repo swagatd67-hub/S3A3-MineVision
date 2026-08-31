@@ -8,16 +8,21 @@ import {
   ChevronLeft,
   ChevronRight,
   Square,
-  Sun
+  Sun,
+  RefreshCw,
+  VideoOff,
 } from 'lucide-react';
 import type { CameraId, DefectDetection, RobotDriveState } from '../types';
 import { sounds } from '../utils/audio';
+import { getLiveStreamUrl } from '../api/video';
 
 interface CameraFeedProps {
+  missionId?: string;
   robotState: RobotDriveState;
   activeCamera: CameraId;
   onChangeCamera: (cam: CameraId) => void;
   isRecording: boolean;
+  recordingStatus?: 'IDLE' | 'STARTING' | 'RECORDING' | 'STOPPING' | 'ERROR';
   onToggleRecord: () => void;
   recordSeconds: number;
   onTakeSnapshot: () => void;
@@ -28,7 +33,14 @@ interface CameraFeedProps {
 }
 
 export const CameraFeed: React.FC<CameraFeedProps> = ({
+  missionId = 'M-104',
   robotState,
+  activeCamera,
+  onChangeCamera,
+  isRecording,
+  recordingStatus = 'IDLE',
+  onToggleRecord,
+  recordSeconds,
   onTakeSnapshot,
   onDrive,
   onStop,
@@ -36,6 +48,18 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Stream status & retry handling
+  const [streamError, setStreamError] = useState(false);
+  const [streamRetryKey, setStreamRetryKey] = useState(0);
+
+  // Derive stream URL using real backend helper
+  const streamUrl = `${getLiveStreamUrl(missionId, 10, activeCamera, true)}&_k=${streamRetryKey}`;
+
+  const handleChangeCamera = (cam: CameraId) => {
+    setStreamError(false);
+    onChangeCamera(cam);
+  };
 
   // Dynamic sway based on robot drive derived directly during render
   let targetX = 0;
@@ -87,6 +111,19 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
     }
   };
 
+  const handleRetryStream = () => {
+    sounds.playClick('tactile');
+    setStreamError(false);
+    setStreamRetryKey((prev) => prev + 1);
+  };
+
+  const cameraLabels: Record<CameraId, string> = {
+    'cam-01': 'CAM 01 (FRONT)',
+    'cam-02': 'CAM 02 (REAR)',
+    'cam-03': 'CAM 03 (PAN-TILT)',
+    thermal: 'THERMAL VISION',
+  };
+
   return (
     <div
       id="camera-feed-container"
@@ -99,25 +136,57 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
     >
       {/* Video Content Layer */}
       <div
-        className="absolute inset-0 w-full h-full transition-transform duration-300 ease-out"
+        className="absolute inset-0 w-full h-full transition-transform duration-300 ease-out flex items-center justify-center"
         style={{
           transform: `scale(1.02) translate(${cameraOffset.x}px, ${cameraOffset.y}px) rotate(${cameraOffset.tilt}deg)`,
         }}
       >
-        <img
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvfMfhcz24RmhMYJ7iw5PF7U-Fq1B-49z-fg_6taI15_l9ZrSylVSSgrJ900BXZwz1Xaj9QXrUQSyhX3f9k61JOTr5eKjCWRirHXKpP0kUHLYWUWkPDh3X9t9wJsRbEYrGpn2PyyOz6OTTgdkKl6MTuEclTrS-BTw5Arr9o_JYFzHhUoPha9GnHBQPVSyoNwaiMklf0Ock8moBZlk17cINgvWGxMbVhjlkxsD7RR1AQIDBOMf8RIb25Q"
-          alt="Subterranean Pipe Inspection Camera"
-          className={`w-full h-full object-cover transition-opacity duration-300 ${
-            robotState.lightsOn ? 'opacity-95' : 'opacity-40'
-          }`}
-        />
+        {!streamError ? (
+          <img
+            key={streamUrl}
+            src={streamUrl}
+            alt={`Live Mission ${missionId} Camera Feed (${activeCamera})`}
+            onLoad={() => {
+              setStreamError(false);
+            }}
+            onError={() => {
+              setStreamError(true);
+            }}
+            className={`w-full h-full object-cover transition-opacity duration-300 ${
+              robotState.lightsOn ? 'opacity-95' : 'opacity-40'
+            }`}
+          />
+        ) : (
+          /* Tactical Offline / Stream Error Overlay */
+          <div className="absolute inset-0 bg-[#0c0d10] flex flex-col items-center justify-center gap-4 p-6 text-center z-10">
+            <div className="p-4 rounded-full bg-[#ff5449]/10 border border-[#ff5449]/30 text-[#ff5449] animate-pulse">
+              <VideoOff className="w-10 h-10" />
+            </div>
+            <div>
+              <h3 className="font-['Poppins'] text-lg font-bold text-white uppercase tracking-wider">
+                CAMERA OFFLINE / STREAM UNAVAILABLE
+              </h3>
+              <p className="font-['Space_Mono'] text-xs text-[#ff8c82] mt-1 max-w-sm">
+                Backend stream at <code className="text-white bg-black/60 px-1 py-0.5 rounded">/api/v1/video/missions/{missionId}/stream</code> is disconnected or unavailable.
+              </p>
+            </div>
+            <button
+              onClick={handleRetryStream}
+              className="px-4 py-2 rounded-lg bg-[#a3e635] hover:bg-[#b6f059] text-black font-['Space_Mono'] text-xs font-bold uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer shadow-lg"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry Camera Feed</span>
+            </button>
+          </div>
+        )}
 
         {/* Headlights Spotlight Effect */}
-        {robotState.lightsOn && (
+        {robotState.lightsOn && !streamError && (
           <div
             className="absolute inset-0 pointer-events-none transition-opacity duration-300"
             style={{
-              background: 'radial-gradient(circle at 50% 50%, rgba(204, 255, 128, 0.12) 0%, rgba(93, 230, 255, 0.06) 40%, transparent 70%)',
+              background:
+                'radial-gradient(circle at 50% 50%, rgba(204, 255, 128, 0.12) 0%, rgba(93, 230, 255, 0.06) 40%, transparent 70%)',
             }}
           />
         )}
@@ -127,22 +196,74 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
       <div className="absolute inset-0 scanlines pointer-events-none opacity-40" />
       <div className="absolute inset-0 vignette pointer-events-none" />
 
-      {/* Top Left Tags: LIVE + CAM 01 */}
-      <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-2 z-20">
-        {/* LIVE Badge */}
-        <div className="bg-[#2a1313]/80 border border-[#ff5449]/50 px-2 py-0.5 rounded flex items-center gap-1.5 font-['Space_Mono'] text-[11px] text-[#ffb4ab] shadow-lg">
-          <span className="w-2 h-2 rounded-full bg-[#ff5449] animate-pulse" />
-          <span className="font-bold">LIVE</span>
-        </div>
+      {/* Top Left Tags: LIVE/OFFLINE Badge + Camera Selector */}
+      <div className="absolute top-3 left-3 sm:top-4 sm:left-4 flex flex-wrap items-center gap-2 z-20">
+        {/* Stream Status Badge */}
+        {!streamError ? (
+          <div className="bg-[#1a2e1a]/80 border border-[#a3e635]/50 px-2 py-0.5 rounded flex items-center gap-1.5 font-['Space_Mono'] text-[11px] text-[#ccff80] shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-[#a3e635] animate-pulse" />
+            <span className="font-bold">LIVE STREAM</span>
+          </div>
+        ) : (
+          <div className="bg-[#2a1313]/80 border border-[#ff5449]/50 px-2 py-0.5 rounded flex items-center gap-1.5 font-['Space_Mono'] text-[11px] text-[#ffb4ab] shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-[#ff5449]" />
+            <span className="font-bold">OFFLINE</span>
+          </div>
+        )}
 
-        {/* CAM 01 Badge */}
-        <div className="bg-black/60 backdrop-blur-sm border border-white/20 px-2 py-0.5 rounded font-['Space_Mono'] text-[11px] text-white/90 font-semibold shadow-lg">
-          CAM 01
-        </div>
+        {/* Camera Selector Dropdown / Badge */}
+        <select
+          value={activeCamera}
+          onChange={(e) => {
+            sounds.playClick('tactile');
+            handleChangeCamera(e.target.value as CameraId);
+          }}
+          className="bg-black/70 backdrop-blur-sm border border-white/20 px-2 py-0.5 rounded font-['Space_Mono'] text-[11px] text-white font-semibold shadow-lg focus:outline-none focus:border-[#5de6ff] cursor-pointer"
+        >
+          <option value="cam-01">CAM 01 (FRONT)</option>
+          <option value="cam-02">CAM 02 (REAR)</option>
+          <option value="cam-03">CAM 03 (PAN-TILT)</option>
+          <option value="thermal">THERMAL VISION</option>
+        </select>
+
+        {/* Recording Status Badge */}
+        {isRecording && (
+          <div className="bg-[#ff5449]/20 border border-[#ff5449]/60 px-2 py-0.5 rounded flex items-center gap-1.5 font-['Space_Mono'] text-[11px] text-[#ff8c82] animate-pulse shadow-lg">
+            <span className="w-2 h-2 rounded-full bg-[#ff5449]" />
+            <span className="font-bold uppercase">
+              {recordingStatus === 'STARTING'
+                ? 'STARTING REC...'
+                : recordingStatus === 'STOPPING'
+                ? 'STOPPING REC...'
+                : `REC ${Math.floor(recordSeconds / 60)
+                    .toString()
+                    .padStart(2, '0')}:${(recordSeconds % 60).toString().padStart(2, '0')}`}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Top Right Action Buttons: Fullscreen & Snapshot */}
+      {/* Top Right Action Buttons: Record, Fullscreen & Snapshot */}
       <div className="absolute top-3 right-3 sm:top-4 sm:right-4 flex items-center gap-2 z-20">
+        {/* Record Toggle */}
+        <button
+          id="btn-cam-record"
+          onClick={onToggleRecord}
+          disabled={recordingStatus === 'STARTING' || recordingStatus === 'STOPPING'}
+          title={isRecording ? 'Stop Recording' : 'Start Recording'}
+          className={`border p-2 rounded transition-all cursor-pointer shadow-lg flex items-center gap-1.5 ${
+            isRecording
+              ? 'bg-[#ff5449]/20 hover:bg-[#ff5449]/40 border-[#ff5449] text-[#ff8c82]'
+              : 'bg-black/60 hover:bg-black/90 border-white/20 text-white hover:text-[#ff5449]'
+          } ${
+            recordingStatus === 'STARTING' || recordingStatus === 'STOPPING'
+              ? 'opacity-50 cursor-not-allowed'
+              : ''
+          }`}
+        >
+          <Square className={`w-4 h-4 ${isRecording ? 'fill-[#ff5449]' : ''}`} />
+        </button>
+
         {/* Fullscreen Toggle */}
         <button
           id="btn-cam-fullscreen"
@@ -189,7 +310,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40 bg-[#141619]/90 backdrop-blur-md p-4 rounded-2xl border border-white/20 shadow-2xl flex flex-col items-center gap-3">
           <div className="flex items-center justify-between w-full border-b border-white/10 pb-2 px-1">
             <span className="font-['Space_Mono'] text-[10px] font-bold text-[#ccff80] tracking-wider uppercase">
-              FULLSCREEN ROV CONTROL
+              FULLSCREEN ROV CONTROL • {cameraLabels[activeCamera]}
             </span>
             <div className="flex items-center gap-3">
               {onToggleLights && (
