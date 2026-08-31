@@ -45,6 +45,11 @@ function App() {
           />
 
           <Route
+            path="/missions/:missionId/analytics"
+            element={<Analytics />}
+          />
+
+          <Route
             path="/missions"
             element={<Missions />}
           />
