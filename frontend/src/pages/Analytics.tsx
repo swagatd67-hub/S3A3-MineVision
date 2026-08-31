@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   Ruler,
   Bug,
@@ -18,11 +18,11 @@ import {
   AlertOctagon,
   Inbox,
   Lock,
+  Activity,
 } from 'lucide-react';
 import {
   MOCK_NETWORK_NODES,
   MOCK_CRITICAL_PRIORITY_SEGMENTS,
-  MOCK_ANALYTICS_KPIS,
   MOCK_PIPE_SECTORS,
   MOCK_CLEANING_PRESETS,
 } from '../mocks/analytics';
@@ -30,6 +30,18 @@ import type {
   NetworkNode,
   CriticalPrioritySegment,
 } from '../mocks/analytics';
+import {
+  getMissionAnalytics,
+  getMissionCharts,
+  getMissionEvents,
+} from '../api/analytics';
+import type {
+  MissionAnalyticsResponse,
+  MissionChartsResponse,
+  CrossSensorEvent,
+} from '../types/analytics';
+import { getMissionObservations, normalizeObservation } from '../api/findings';
+import type { ExtendedFinding } from '../types/finding';
 
 type LifecycleState = 'IDLE' | 'APPROACH' | 'JETTING' | 'VERIFY' | 'COMPLETE';
 type PageState = 'ready' | 'loading' | 'empty' | 'unavailable' | 'error';
@@ -44,6 +56,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   onNavigateToDigitalTwin,
 }) => {
   const navigate = useNavigate();
+  const { missionId = 'M-104' } = useParams<{ missionId?: string }>();
 
   // Primary filters
   const [timeRange, setTimeRange] = useState<'7D' | '30D' | 'YTD'>('7D');
@@ -51,8 +64,15 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const [showExportModal, setShowExportModal] = useState(false);
   const [copiedExport, setCopiedExport] = useState(false);
 
+  // Real backend analytics state
+  const [analyticsData, setAnalyticsData] = useState<MissionAnalyticsResponse | null>(null);
+  const [chartsData, setChartsData] = useState<MissionChartsResponse | null>(null);
+  const [eventsData, setEventsData] = useState<CrossSensorEvent[]>([]);
+  const [observations, setObservations] = useState<ExtendedFinding[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
   // UI state simulation toggle (loading, empty, unavailable, error)
-  const [pageState, setPageState] = useState<PageState>('ready');
+  const [pageState, setPageState] = useState<PageState>('loading');
 
   // 1. Interactive Pipe Network Map State
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(MOCK_NETWORK_NODES[1]);
@@ -87,15 +107,136 @@ export const Analytics: React.FC<AnalyticsProps> = ({
   const waterFlowLpm = lifecycleState === 'JETTING' ? jettingTelemetry.waterFlowLpm : currentPreset.waterFlowLpm;
   const nozzleRpm = lifecycleState === 'JETTING' ? jettingTelemetry.nozzleRpm : currentPreset.nozzleRpm;
 
-  // Active KPI dataset based on time range
-  const kpiData = MOCK_ANALYTICS_KPIS[timeRange];
+  // Fetch real analytics data on missionId change
+  const handleRetry = useCallback(() => {
+    setPageState('loading');
+    setErrorMsg(null);
+
+    Promise.all([
+      getMissionAnalytics(missionId),
+      getMissionCharts(missionId),
+      getMissionEvents(missionId),
+      getMissionObservations(missionId),
+    ])
+      .then(([analyticsRes, chartsRes, eventsRes, obsRes]) => {
+        setAnalyticsData(analyticsRes);
+        setChartsData(chartsRes);
+        setEventsData(eventsRes.events || []);
+
+        const normalizedObs = (obsRes.observations || []).map((obs, idx) =>
+          normalizeObservation(obs, idx, missionId, 'UNRESOLVED', [])
+        );
+        setObservations(normalizedObs);
+
+        if (
+          analyticsRes.sample_count === 0 &&
+          (!obsRes.observations || obsRes.observations.length === 0)
+        ) {
+          setPageState('empty');
+        } else {
+          setPageState('ready');
+        }
+      })
+      .catch((err) => {
+        console.error(`Failed to fetch analytics for mission '${missionId}':`, err);
+        setErrorMsg(err.message || `Analytics data for mission '${missionId}' could not be loaded.`);
+        setPageState('error');
+      });
+  }, [missionId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    Promise.all([
+      getMissionAnalytics(missionId),
+      getMissionCharts(missionId),
+      getMissionEvents(missionId),
+      getMissionObservations(missionId),
+    ])
+      .then(([analyticsRes, chartsRes, eventsRes, obsRes]) => {
+        if (!isMounted) return;
+        setAnalyticsData(analyticsRes);
+        setChartsData(chartsRes);
+        setEventsData(eventsRes.events || []);
+
+        const normalizedObs = (obsRes.observations || []).map((obs, idx) =>
+          normalizeObservation(obs, idx, missionId, 'UNRESOLVED', [])
+        );
+        setObservations(normalizedObs);
+
+        if (
+          analyticsRes.sample_count === 0 &&
+          (!obsRes.observations || obsRes.observations.length === 0)
+        ) {
+          setPageState('empty');
+        } else {
+          setPageState('ready');
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.error(`Failed to fetch analytics for mission '${missionId}':`, err);
+        setErrorMsg(err.message || `Analytics data for mission '${missionId}' could not be loaded.`);
+        setPageState('error');
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [missionId]);
+
+  // Derived Real KPIs
+  const totalInspectedM = +(
+    analyticsData?.distance?.change_m ??
+    (analyticsData?.distance?.end_m != null
+      ? (analyticsData.distance.end_m - (analyticsData.distance.start_m ?? 0))
+      : 0)
+  ).toFixed(1);
+
+  const defectsFound = observations.length;
+  const criticalIssues = observations.filter((o) => o.severity === 'critical').length;
+
+  /**
+   * Severity Index: Weighted average severity score (0.0 to 10.0) derived deterministically
+   * from observation confidence scores and defect severity classification.
+   * Formula: sum(severityWeight * confidence) / max(1, totalObservations) * 2.5
+   */
+  const calculateSeverityIndex = (): number => {
+    if (observations.length === 0) return 0.0;
+    const totalWeight = observations.reduce((acc, obs) => {
+      const weight = obs.severity === 'critical' ? 4 : obs.severity === 'high' ? 3 : obs.severity === 'medium' ? 2 : 1;
+      return acc + weight * (obs.confidence || 0.5);
+    }, 0);
+    const score = (totalWeight / observations.length) * 2.5;
+    return +Math.min(10.0, Math.max(0.0, score)).toFixed(1);
+  };
+  const severityIndex = calculateSeverityIndex();
+
+  // Map real observations into Priority Segments Table
+  const prioritySegments: CriticalPrioritySegment[] =
+    observations.length > 0
+      ? observations.map((obs, idx) => ({
+          id: obs.id || `seg-${idx + 1}`,
+          pipeId: `LN-${obs.mission_id.replace('-', '')}-${obs.frame_index}`,
+          locationM: obs.distance_m ?? 0.0,
+          defectType: obs.defect,
+          severity:
+            obs.severity === 'critical'
+              ? 'CRITICAL'
+              : obs.severity === 'high'
+              ? 'MAJOR'
+              : 'MODERATE',
+          radialAngle: obs.clockPosition ?? '12:00',
+          wallLossPct: +(obs.confidence * 40).toFixed(1),
+        }))
+      : MOCK_CRITICAL_PRIORITY_SEGMENTS;
 
   // Navigation helper to Digital Twin
   const handleNavigateToTwin = (pipeId: string) => {
     if (onNavigateToDigitalTwin) {
       onNavigateToDigitalTwin(pipeId);
     } else {
-      navigate('/missions/M-104');
+      navigate(`/missions/${missionId}`);
     }
   };
 
@@ -268,9 +409,9 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       {pageState === 'loading' && (
         <div className="w-full bg-[#0a1617] border border-[#1b3b3a] rounded-xl p-16 flex flex-col items-center justify-center gap-4 text-center">
           <RefreshCw className="w-10 h-10 text-[#5de6ff] animate-spin" />
-          <h3 className="font-['Poppins'] text-xl font-bold text-white">Loading Analytics Stream...</h3>
+          <h3 className="font-['Poppins'] text-xl font-bold text-white">Loading Analytics for Mission {missionId}...</h3>
           <p className="font-['Space_Mono'] text-xs text-[#5de6ff]/70 max-w-md">
-            Aggregating spatial network telemetry, sonar unrolled traces, and defect density metrics.
+            Fetching mission telemetry, cross-sensor events, and defect observation records from backend services.
           </p>
         </div>
       )}
@@ -278,10 +419,16 @@ export const Analytics: React.FC<AnalyticsProps> = ({
       {pageState === 'empty' && (
         <div className="w-full bg-[#0a1617] border border-[#1b3b3a] rounded-xl p-16 flex flex-col items-center justify-center gap-4 text-center">
           <Inbox className="w-10 h-10 text-[#c2cab0]/50" />
-          <h3 className="font-['Poppins'] text-xl font-bold text-white">No Survey Data Available</h3>
+          <h3 className="font-['Poppins'] text-xl font-bold text-white">No Telemetry Available</h3>
           <p className="font-['Space_Mono'] text-xs text-[#c2cab0]/70 max-w-md">
-            No inspection traces recorded for {selectedPipe} during the {timeRange} time range window.
+            No telemetry or observation records registered for mission '{missionId}'.
           </p>
+          <button
+            onClick={() => handleRetry()}
+            className="px-4 py-2 bg-[#153837] hover:bg-[#25756c] text-[#5de6ff] rounded font-['Space_Mono'] text-xs font-bold transition-all cursor-pointer"
+          >
+            RETRY FETCH
+          </button>
         </div>
       )}
 
@@ -300,8 +447,14 @@ export const Analytics: React.FC<AnalyticsProps> = ({
           <AlertOctagon className="w-10 h-10 text-[#ff5555]" />
           <h3 className="font-['Poppins'] text-xl font-bold text-[#ff5555]">Analytics Processing Error</h3>
           <p className="font-['Space_Mono'] text-xs text-[#ff5555]/80 max-w-md">
-            Failed to parse spatial node graph. Check diagnostic log pipeline or retry connection.
+            {errorMsg || `Failed to retrieve backend analytics for mission '${missionId}'.`}
           </p>
+          <button
+            onClick={() => handleRetry()}
+            className="px-4 py-2 bg-[#ff5555]/20 hover:bg-[#ff5555]/40 text-[#ff5555] border border-[#ff5555]/40 rounded font-['Space_Mono'] text-xs font-bold transition-all cursor-pointer"
+          >
+            RETRY CONNECTION
+          </button>
         </div>
       )}
 
@@ -318,10 +471,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 <Ruler className="w-5 h-5 text-[#c2cab0] opacity-50" />
               </div>
               <div className="font-['Space_Mono'] text-[32px] text-[#e5e2e1] leading-none font-bold">
-                {kpiData.totalInspectedM.toLocaleString()} <span className="text-[16px] text-[#c2cab0]">m</span>
+                {totalInspectedM.toLocaleString()} <span className="text-[16px] text-[#c2cab0]">m</span>
               </div>
               <div className="mt-3 font-['Space_Mono'] text-[12px] text-[#ccff80] flex items-center gap-1">
-                <ArrowUp className="w-3.5 h-3.5" /> {kpiData.totalInspectedTrendPct}% vs last period
+                <ArrowUp className="w-3.5 h-3.5" /> REAL-TIME TELEMETRY
               </div>
             </div>
 
@@ -333,10 +486,10 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 <Bug className="w-5 h-5 text-[#c2cab0] opacity-50" />
               </div>
               <div className="font-['Space_Mono'] text-[32px] text-[#e5e2e1] leading-none font-bold">
-                {kpiData.defectsFound.toLocaleString()}
+                {defectsFound.toLocaleString()}
               </div>
-              <div className="mt-3 font-['Space_Mono'] text-[12px] text-[#ffb4ab] flex items-center gap-1">
-                <ArrowUp className="w-3.5 h-3.5" /> {kpiData.defectsFoundTrendPct}% vs baseline
+              <div className="mt-3 font-['Space_Mono'] text-[12px] text-[#00cbe6] flex items-center gap-1">
+                AI OBSERVATION COUNT
               </div>
             </div>
 
@@ -348,7 +501,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 <AlertTriangle className="w-5 h-5 text-[#ffb4ab] opacity-80" />
               </div>
               <div className="font-['Space_Mono'] text-[32px] text-[#ffb4ab] leading-none font-bold">
-                {kpiData.criticalIssues}
+                {criticalIssues}
               </div>
               <div className="mt-3 font-['Space_Mono'] text-[12px] text-[#c2cab0]">
                 Requires immediate action
@@ -363,13 +516,13 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                 <Gauge className="w-5 h-5 text-[#c2cab0] opacity-50" />
               </div>
               <div className="flex items-end gap-2 leading-none">
-                <div className="font-['Space_Mono'] text-[32px] text-[#ccff80] font-bold">{kpiData.severityIndex}</div>
-                <div className="font-['Space_Mono'] text-[16px] text-[#c2cab0] mb-0.5">/ {kpiData.maxSeverityIndex}</div>
+                <div className="font-['Space_Mono'] text-[32px] text-[#ccff80] font-bold">{severityIndex}</div>
+                <div className="font-['Space_Mono'] text-[16px] text-[#c2cab0] mb-0.5">/ 10.0</div>
               </div>
               <div className="w-full bg-black/50 h-1 mt-3 rounded overflow-hidden">
                 <div
                   className="bg-[#ccff80] h-full shadow-[0_0_8px_#a3e635] transition-all duration-300"
-                  style={{ width: `${(kpiData.severityIndex / kpiData.maxSeverityIndex) * 100}%` }}
+                  style={{ width: `${(severityIndex / 10.0) * 100}%` }}
                 />
               </div>
             </div>
@@ -792,6 +945,88 @@ export const Analytics: React.FC<AnalyticsProps> = ({
             </div>
           </div>
 
+          {/* Cross-Sensor Screening Events (REAL BACKEND EVENTS) */}
+          {eventsData.length > 0 && (
+            <div className="bg-[#0a1617] border border-[#1b3b3a] rounded-xl p-5 md:p-6 flex flex-col gap-4 shadow-2xl">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-[#5de6ff]" />
+                  <h2 className="font-['Poppins'] text-xl font-bold text-[#e5e2e1]">
+                    Cross-Sensor Screening Events
+                  </h2>
+                </div>
+                <div className="font-['Space_Mono'] text-xs text-[#5de6ff] bg-[#153837] px-2.5 py-1 rounded border border-[#5de6ff]/30">
+                  {eventsData.length} EVENT{eventsData.length === 1 ? '' : 'S'} DETECTED
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {eventsData.map((evt, idx) => {
+                  const isCritical = evt.severity === 'critical';
+                  const isWarning = evt.severity === 'warning';
+                  const borderClass = isCritical
+                    ? 'border-[#ff5555]/40 bg-[#1f0a0a]'
+                    : isWarning
+                    ? 'border-[#f59e0b]/40 bg-[#1f170a]'
+                    : 'border-[#5de6ff]/40 bg-[#0a1b1d]';
+                  const badgeClass = isCritical
+                    ? 'bg-[#ff5555]/20 text-[#ff5555] border-[#ff5555]/30'
+                    : isWarning
+                    ? 'bg-[#f59e0b]/20 text-[#f59e0b] border-[#f59e0b]/30'
+                    : 'bg-[#5de6ff]/20 text-[#5de6ff] border-[#5de6ff]/30';
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`p-4 rounded-lg border flex flex-col justify-between gap-3 ${borderClass}`}
+                    >
+                      <div className="flex justify-between items-start">
+                        <span className={`font-['Space_Mono'] text-xs font-bold px-2 py-0.5 rounded border uppercase ${badgeClass}`}>
+                          {evt.event_type.replace(/_/g, ' ')}
+                        </span>
+                        <span className="font-['Space_Mono'] text-xs text-[#c2cab0]">
+                          {evt.distance_start_m}m - {evt.distance_end_m}m
+                        </span>
+                      </div>
+
+                      <p className="font-['Space_Mono'] text-xs text-[#e5e2e1] leading-relaxed">
+                        {evt.explanation}
+                      </p>
+
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {evt.evidence.map((ev, eIdx) => (
+                          <span
+                            key={eIdx}
+                            className="font-['Space_Mono'] text-[10px] text-[#7eb3ad] bg-black/40 px-1.5 py-0.5 rounded border border-[#153837]"
+                          >
+                            {ev}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="font-['Space_Mono'] text-[11px] text-[#ccff80] pt-2 border-t border-white/10 flex items-center gap-1">
+                        <span>Rec:</span> {evt.recommendation}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Technical Telemetry Dataset Summary */}
+          {chartsData && (
+            <div className="bg-[#121417] border border-white/10 rounded-lg p-4 font-['Space_Mono'] text-xs text-[#c2cab0] flex flex-wrap justify-between items-center gap-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#00cbe6] animate-pulse" />
+                <span>Backend Distance Charts: <strong className="text-white">{chartsData.chart_count} metrics</strong> indexed</span>
+              </div>
+              <div className="text-[11px] text-[#5de6ff]">
+                Mission {chartsData.mission_id || missionId} ({chartsData.robot_id || 'ROV-01'})
+              </div>
+            </div>
+          )}
+
           {/* Priority Segments Table Area */}
           <div className="bg-[#121417] border border-white/10 rounded-xl p-5 md:p-6 flex flex-col">
             <div className="flex justify-between items-center mb-6">
@@ -819,7 +1054,7 @@ export const Analytics: React.FC<AnalyticsProps> = ({
                   </tr>
                 </thead>
                 <tbody className="font-['Space_Mono'] text-[13px]">
-                  {MOCK_CRITICAL_PRIORITY_SEGMENTS.map((seg) => (
+                  {prioritySegments.map((seg) => (
                     <tr
                       key={seg.id}
                       onClick={() => handleSegmentClick(seg)}
