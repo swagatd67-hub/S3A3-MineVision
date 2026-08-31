@@ -65,7 +65,7 @@ export default function Reports() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a1617] text-white p-4 sm:p-6 lg:p-8 font-['Inter'] selection:bg-[#a3e635] selection:text-black">
+    <div className="min-h-screen bg-[#0a1617] text-white p-4 sm:p-6 lg:p-8 font-['Inter'] selection:bg-[#CCFF80] selection:text-black">
       {/* Print-Only Custom CSS Styles */}
       <style>{`
         @media print {
@@ -111,7 +111,7 @@ export default function Reports() {
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <FileText className="w-6 h-6 text-[#a3e635]" />
+              <FileText className="w-6 h-6 text-[#CCFF80]" />
               <h1 className="font-['Poppins'] text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">
                 Engineering Inspection Report
               </h1>
@@ -134,7 +134,7 @@ export default function Reports() {
 
           <button
             onClick={() => setIsShareModalOpen(true)}
-            className="px-3.5 py-2 rounded-lg bg-[#0e2425] hover:bg-[#153837] border border-[#1b3b3a] text-[#a3e635] text-xs font-['Space_Mono'] font-bold flex items-center gap-2 transition-all cursor-pointer"
+            className="px-3.5 py-2 rounded-lg bg-[#0e2425] hover:bg-[#153837] border border-[#1b3b3a] text-[#CCFF80] text-xs font-['Space_Mono'] font-bold flex items-center gap-2 transition-all cursor-pointer"
           >
             <Share2 className="w-4 h-4" />
             <span>Share</span>
@@ -142,7 +142,7 @@ export default function Reports() {
 
           <button
             onClick={handlePrint}
-            className="px-4 py-2 rounded-lg bg-[#a3e635] hover:bg-[#b6f059] text-black font-['Poppins'] font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(163,230,53,0.3)] cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-[#CCFF80] hover:bg-[#b6f059] text-black font-['Poppins'] font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(163,230,53,0.3)] cursor-pointer"
           >
             <Printer className="w-4 h-4" />
             <span>Print / Save as PDF</span>
@@ -153,7 +153,7 @@ export default function Reports() {
       {/* Main Content Area */}
       {loading ? (
         <div className="max-w-4xl mx-auto my-12 bg-[#0d1f20] border border-[#1b3b3a] rounded-xl p-12 text-center flex flex-col items-center justify-center gap-4">
-          <RefreshCw className="w-8 h-8 text-[#a3e635] animate-spin" />
+          <RefreshCw className="w-8 h-8 text-[#CCFF80] animate-spin" />
           <h3 className="font-['Poppins'] text-lg font-bold text-white uppercase tracking-wider">
             Loading Inspection Report...
           </h3>
@@ -205,13 +205,13 @@ export default function Reports() {
           {/* Document Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start border-b border-[#1b3b3a] pb-6 gap-4">
             <div>
-              <div className="text-[#a3e635] font-['Space_Mono'] text-xs uppercase tracking-widest font-bold mb-1 flex items-center gap-2">
+              <div className="text-[#CCFF80] font-['Space_Mono'] text-xs uppercase tracking-widest font-bold mb-1 flex items-center gap-2">
                 <span>PipeVision Engineering Audit</span>
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                     report.isInterim
                       ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'bg-[#a3e635]/20 text-[#a3e635] border border-[#a3e635]/40'
+                      : 'bg-[#CCFF80]/20 text-[#CCFF80] border border-[#CCFF80]/40'
                   }`}
                 >
                   {report.reportTitle}
@@ -254,7 +254,7 @@ export default function Reports() {
 
             <div>
               <span className="block text-[#649c96] text-[11px]">Inspected Distance:</span>
-              <strong className="text-[#a3e635] block mt-0.5 text-sm font-bold">
+              <strong className="text-[#CCFF80] block mt-0.5 text-sm font-bold">
                 {report.inspectedDistanceM.toFixed(1)} m
               </strong>
             </div>
@@ -316,7 +316,7 @@ export default function Reports() {
               </div>
               <div className="bg-[#0c2022] p-2.5 rounded border border-[#173838]">
                 <span className="text-[#649c96] text-[10px] block">Assessment Source</span>
-                <span className="text-[#a3e635] font-bold">PipeVision Heuristic</span>
+                <span className="text-[#CCFF80] font-bold">PipeVision Heuristic</span>
               </div>
             </div>
           </div>
@@ -337,7 +337,7 @@ export default function Reports() {
 
             {report.observations.length === 0 ? (
               <div className="bg-[#071314] p-8 rounded-lg border border-[#173838] text-center font-['Space_Mono'] text-xs text-[#649c96] flex flex-col items-center gap-2">
-                <CheckCircle2 className="w-6 h-6 text-[#a3e635]" />
+                <CheckCircle2 className="w-6 h-6 text-[#CCFF80]" />
                 <span>No defects or anomalies recorded during this inspection.</span>
               </div>
             ) : (
@@ -360,7 +360,7 @@ export default function Reports() {
                       <tr key={obs.observation_id} className="hover:bg-[#0e2425]/50 transition-colors">
                         <td className="p-3 font-bold text-[#5de6ff]">{obs.observation_id}</td>
                         <td className="p-3 text-[#649c96]">#{obs.frame_index}</td>
-                        <td className="p-3 font-bold text-[#a3e635]">{obs.distance_m.toFixed(1)} m</td>
+                        <td className="p-3 font-bold text-[#CCFF80]">{obs.distance_m.toFixed(1)} m</td>
                         <td className="p-3 font-bold">{obs.class_code.toUpperCase()}</td>
                         <td className="p-3 text-white">{obs.class_name}</td>
                         <td className="p-3 text-[#9ed4ce]">{obs.clock_position}</td>
@@ -390,8 +390,8 @@ export default function Reports() {
 
           {/* Action Recommendations */}
           <div className="bg-[#071314] p-5 rounded-lg border border-[#173838] flex flex-col gap-4">
-            <h4 className="font-['Poppins'] text-sm font-bold text-[#a3e635] uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-[#a3e635]" />
+            <h4 className="font-['Poppins'] text-sm font-bold text-[#CCFF80] uppercase tracking-wider flex items-center gap-2">
+              <Layers className="w-4 h-4 text-[#CCFF80]" />
               <span>Engineering Action Plan & Recommendations</span>
             </h4>
 
@@ -441,7 +441,7 @@ export default function Reports() {
           <div className="bg-[#0e2425] border border-[#1b3b3a] rounded-xl p-6 max-w-md w-full flex flex-col gap-4 shadow-2xl animate-fade-in">
             <div className="flex items-center justify-between">
               <h3 className="font-['Poppins'] text-base font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Share2 className="w-4 h-4 text-[#a3e635]" />
+                <Share2 className="w-4 h-4 text-[#CCFF80]" />
                 <span>Share Inspection Report</span>
               </h3>
               <button onClick={() => setIsShareModalOpen(false)} className="text-[#649c96] hover:text-white cursor-pointer">
@@ -462,7 +462,7 @@ export default function Reports() {
               />
               <button
                 onClick={handleShareCopy}
-                className="px-3 py-2 bg-[#a3e635] text-black font-['Poppins'] font-bold text-xs rounded cursor-pointer hover:bg-[#b6f059] transition-all"
+                className="px-3 py-2 bg-[#CCFF80] text-black font-['Poppins'] font-bold text-xs rounded cursor-pointer hover:bg-[#b6f059] transition-all"
               >
                 {copiedLink ? 'Copied!' : 'Copy'}
               </button>

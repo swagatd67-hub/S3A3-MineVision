@@ -57,13 +57,13 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
             }}
             className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
               activeTab === 'telemetry'
-                ? 'bg-[#a3e635] text-[#121f00] font-bold shadow-[0_0_12px_rgba(163,230,53,0.3)]'
+                ? 'bg-[#CCFF80] text-[#121f00] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
             }`}
             title="Telemetry Dashboard"
           >
             <BarChart2 className={`w-4 h-4 flex-shrink-0 ${activeTab === 'telemetry' ? 'text-[#121f00]' : 'text-white/70'}`} />
-            <span className="font-['Space_Mono'] text-xs tracking-wide hidden lg:block">
+            <span className="font-['Inter'] text-xs tracking-wide hidden lg:block">
               Telemetry
             </span>
           </button>
@@ -77,13 +77,13 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
             }}
             className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
               activeTab === 'network-mapping'
-                ? 'bg-[#a3e635] text-[#121f00] font-bold shadow-[0_0_12px_rgba(163,230,53,0.3)]'
+                ? 'bg-[#CCFF80] text-[#121f00] font-bold'
                 : 'text-white/70 hover:bg-white/5 hover:text-white'
             }`}
             title="Network Mapping"
           >
             <Map className={`w-4 h-4 flex-shrink-0 ${activeTab === 'network-mapping' ? 'text-[#121f00]' : 'text-white/70'}`} />
-            <span className="font-['Space_Mono'] text-xs tracking-wide hidden lg:block">
+            <span className="font-['Inter'] text-xs tracking-wide hidden lg:block">
               Network Mapping
             </span>
           </button>
@@ -98,7 +98,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
           title="Exit Cockpit to Missions"
         >
           <ArrowLeft className="w-4 h-4 flex-shrink-0 text-white/50" />
-          <span className="font-['Space_Mono'] text-xs tracking-wide hidden lg:block">
+          <span className="font-['Inter'] text-xs tracking-wide hidden lg:block">
             Exit Cockpit
           </span>
         </Link>
@@ -111,7 +111,7 @@ export const SideNavBar: React.FC<SideNavBarProps> = ({
           }}
           className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-lg text-left transition-all cursor-pointer ${
             activeTab === 'help'
-              ? 'bg-[#a3e635] text-[#121f00] font-bold'
+              ? 'bg-[#CCFF80] text-[#121f00] font-bold'
               : 'text-white/50 hover:bg-white/5 hover:text-white'
           }`}
           title="Help & Info"
