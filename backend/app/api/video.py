@@ -1,13 +1,26 @@
+import logging
 import math
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from backend.app.config import get_settings
 from backend.app.db import get_db
 from backend.app.services.inspection import (
     CanonicalInspectionFrame,
@@ -27,14 +40,23 @@ from backend.app.services.video.frame_store import (
     FrameMetadata,
     FrameMetadataStore,
 )
+from backend.app.services.video.recording import RecordingManager
 from backend.app.services.video.sewer_classifier import (
     get_sewer_classifier_engine,
 )
+from backend.app.services.video.snapshot_store import (
+    SnapshotRecord,
+    SnapshotStore,
+)
+from backend.app.services.video.streaming import mjpeg_frame_generator
 from robot.localization.models import LocalizationQuality, RobotPose
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/video", tags=["video"])
 
 frame_store = FrameMetadataStore()
+snapshot_store = SnapshotStore()
+recording_manager = RecordingManager()
 pipeline_detector = NullDetector()
 ingestion_gateway = InspectionIngestionGateway()
 
@@ -48,6 +70,16 @@ class FrameMetadataRequest(BaseModel):
     frame_path: str | None = Field(default=None, max_length=512)
 
 
+class CreateSnapshotRequest(BaseModel):
+    frame_index: int = Field(ge=0)
+    camera_id: str | None = Field(default=None, max_length=64)
+    notes: str | None = Field(default=None, max_length=512)
+
+
+class StartRecordingRequest(BaseModel):
+    camera_id: str | None = Field(default=None, max_length=64)
+
+
 @router.get("/health")
 def video_health() -> dict:
     return {
@@ -56,6 +88,9 @@ def video_health() -> dict:
         "supported_sources": ["file", "webcam"],
         "image_storage": True,
         "detection_pipeline": True,
+        "snapshots": True,
+        "streaming": True,
+        "recording": True,
     }
 
 
@@ -77,7 +112,11 @@ def store_frame_metadata(payload: FrameMetadataRequest) -> dict:
         "frame": {
             "mission_id": metadata.mission_id,
             "frame_index": metadata.frame_index,
-            "timestamp": metadata.timestamp.isoformat() if metadata.timestamp is not None else None,
+            "timestamp": (
+                metadata.timestamp.isoformat()
+                if metadata.timestamp is not None
+                else None
+            ),
             "distance_m": metadata.distance_m,
             "source": metadata.source,
             "frame_path": metadata.frame_path,
@@ -136,7 +175,11 @@ async def store_frame_image(
         "frame": {
             "mission_id": metadata.mission_id,
             "frame_index": metadata.frame_index,
-            "timestamp": metadata.timestamp.isoformat() if metadata.timestamp is not None else None,
+            "timestamp": (
+                metadata.timestamp.isoformat()
+                if metadata.timestamp is not None
+                else None
+            ),
             "distance_m": metadata.distance_m,
             "source": metadata.source,
             "frame_path": metadata.frame_path,
@@ -158,7 +201,11 @@ def list_frame_metadata(
             {
                 "mission_id": item.mission_id,
                 "frame_index": item.frame_index,
-                "timestamp": item.timestamp.isoformat() if item.timestamp is not None else None,
+                "timestamp": (
+                    item.timestamp.isoformat()
+                    if item.timestamp is not None
+                    else None
+                ),
                 "distance_m": item.distance_m,
                 "source": item.source,
                 "frame_path": item.frame_path,
@@ -184,7 +231,11 @@ def get_frame_metadata(
     return {
         "mission_id": mission_id,
         "frame_index": record.frame_index,
-        "timestamp": record.timestamp.isoformat() if record.timestamp is not None else None,
+        "timestamp": (
+            record.timestamp.isoformat()
+            if record.timestamp is not None
+            else None
+        ),
         "distance_m": record.distance_m,
         "source": record.source,
         "frame_path": record.frame_path,
@@ -196,10 +247,13 @@ def get_frame_image(
     mission_id: str,
     frame_index: int,
 ):
-    path = frame_store.image_path(
-        mission_id,
-        frame_index,
-    )
+    try:
+        path = frame_store.image_path(
+            mission_id,
+            frame_index,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if path is None or not path.exists():
         raise HTTPException(
@@ -228,10 +282,13 @@ def detect_frame(
             detail="frame_not_found",
         )
 
-    image_path = frame_store.image_path(
-        mission_id,
-        frame_index,
-    )
+    try:
+        image_path = frame_store.image_path(
+            mission_id,
+            frame_index,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if image_path is None or not image_path.exists():
         raise HTTPException(
@@ -256,7 +313,11 @@ def detect_frame(
     return {
         "mission_id": mission_id,
         "frame_index": frame_index,
-        "timestamp": record.timestamp.isoformat() if record.timestamp is not None else None,
+        "timestamp": (
+            record.timestamp.isoformat()
+            if record.timestamp is not None
+            else None
+        ),
         "distance_m": record.distance_m,
         "source": record.source,
         **result_to_dict(result),
@@ -279,10 +340,13 @@ def classify_sewer_frame(
             detail="frame_not_found",
         )
 
-    image_path = frame_store.image_path(
-        mission_id,
-        frame_index,
-    )
+    try:
+        image_path = frame_store.image_path(
+            mission_id,
+            frame_index,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
 
     if image_path is None or not image_path.exists():
         raise HTTPException(
@@ -299,11 +363,346 @@ def classify_sewer_frame(
     return {
         "mission_id": mission_id,
         "frame_index": frame_index,
-        "timestamp": record.timestamp.isoformat() if record.timestamp is not None else None,
+        "timestamp": (
+            record.timestamp.isoformat()
+            if record.timestamp is not None
+            else None
+        ),
         "distance_m": record.distance_m,
         "source": record.source,
         **result.to_dict(),
     }
+
+
+# ============================================================================
+# SNAPSHOT ENDPOINTS
+# ============================================================================
+
+
+@router.post("/missions/{mission_id}/snapshots", status_code=201)
+def create_snapshot(
+    mission_id: str,
+    payload: CreateSnapshotRequest,
+) -> dict:
+    """Create a persistent media snapshot from an existing mission frame."""
+    frame_record = frame_store.get(mission_id, payload.frame_index)
+    if frame_record is None:
+        raise HTTPException(status_code=404, detail="frame_not_found")
+
+    try:
+        image_path = frame_store.image_path(mission_id, payload.frame_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if image_path is None or not image_path.exists():
+        raise HTTPException(status_code=404, detail="frame_image_not_found")
+
+    snapshot_id = f"snap-{payload.frame_index:06d}-{uuid.uuid4().hex[:6]}"
+    image_url = f"/api/v1/video/missions/{mission_id}/snapshots/{snapshot_id}/image"
+
+    rec = snapshot_store.create(
+        SnapshotRecord(
+            snapshot_id=snapshot_id,
+            mission_id=mission_id,
+            frame_index=payload.frame_index,
+            timestamp=frame_record.timestamp,
+            distance_m=frame_record.distance_m,
+            camera_id=payload.camera_id,
+            frame_path=frame_record.frame_path,
+            image_url=image_url,
+            notes=payload.notes,
+        )
+    )
+
+    return {
+        "snapshot_id": rec.snapshot_id,
+        "mission_id": rec.mission_id,
+        "frame_index": rec.frame_index,
+        "timestamp": rec.timestamp.isoformat() if rec.timestamp is not None else None,
+        "distance_m": rec.distance_m,
+        "camera_id": rec.camera_id,
+        "image_url": rec.image_url,
+        "notes": rec.notes,
+        "created_at": rec.created_at.isoformat() if rec.created_at is not None else None,
+    }
+
+
+@router.get("/missions/{mission_id}/snapshots")
+def list_snapshots(
+    mission_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> dict:
+    """List persistent media snapshots for a mission."""
+    records = snapshot_store.list(mission_id, limit=limit)
+    return {
+        "mission_id": mission_id,
+        "count": len(records),
+        "snapshots": [
+            {
+                "snapshot_id": r.snapshot_id,
+                "mission_id": r.mission_id,
+                "frame_index": r.frame_index,
+                "timestamp": r.timestamp.isoformat() if r.timestamp is not None else None,
+                "distance_m": r.distance_m,
+                "camera_id": r.camera_id,
+                "image_url": r.image_url,
+                "notes": r.notes,
+                "created_at": r.created_at.isoformat() if r.created_at is not None else None,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.get("/missions/{mission_id}/snapshots/{snapshot_id}")
+def get_snapshot(
+    mission_id: str,
+    snapshot_id: str,
+) -> dict:
+    """Retrieve metadata for a specific persistent media snapshot."""
+    r = snapshot_store.get(mission_id, snapshot_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="snapshot_not_found")
+
+    return {
+        "snapshot_id": r.snapshot_id,
+        "mission_id": r.mission_id,
+        "frame_index": r.frame_index,
+        "timestamp": r.timestamp.isoformat() if r.timestamp is not None else None,
+        "distance_m": r.distance_m,
+        "camera_id": r.camera_id,
+        "image_url": r.image_url,
+        "notes": r.notes,
+        "created_at": r.created_at.isoformat() if r.created_at is not None else None,
+    }
+
+
+@router.get("/missions/{mission_id}/snapshots/{snapshot_id}/image")
+def get_snapshot_image(
+    mission_id: str,
+    snapshot_id: str,
+):
+    """Retrieve the image binary for a specific persistent media snapshot."""
+    r = snapshot_store.get(mission_id, snapshot_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="snapshot_not_found")
+
+    try:
+        path = frame_store.image_path(mission_id, r.frame_index)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if path is None or not path.exists():
+        raise HTTPException(status_code=404, detail="snapshot_image_not_found")
+
+    return FileResponse(path)
+
+
+@router.delete("/missions/{mission_id}/snapshots/{snapshot_id}")
+def delete_snapshot(
+    mission_id: str,
+    snapshot_id: str,
+) -> dict:
+    """Delete a persistent media snapshot record."""
+    deleted = snapshot_store.delete(mission_id, snapshot_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="snapshot_not_found")
+    return {"deleted": True, "snapshot_id": snapshot_id}
+
+
+# ============================================================================
+# STREAMING ENDPOINTS
+# ============================================================================
+
+
+@router.get("/missions/{mission_id}/stream")
+def get_live_stream(
+    mission_id: str,
+    camera_id: str = Query(default="cam-01"),
+    fps: float = Query(default=10.0, ge=1.0, le=60.0),
+    loop: bool = Query(default=True),
+):
+    """Stream live/simulated video feed as an MJPEG multipart response.
+
+    Note: Exposes stored or simulated mission frames as a development/playback stream
+    when dedicated hardware video sources are offline.
+    """
+    return StreamingResponse(
+        mjpeg_frame_generator(
+            mission_id=mission_id,
+            frame_store=frame_store,
+            camera_id=camera_id,
+            fps=fps,
+            loop=loop,
+        ),
+        media_type="multipart/x-mixed-replace; boundary=frame",
+    )
+
+
+@router.websocket("/missions/{mission_id}/ws/stream")
+async def websocket_stream(
+    websocket: WebSocket,
+    mission_id: str,
+    fps: float = Query(default=10.0, ge=1.0, le=60.0),
+):
+    """WebSocket endpoint for real-time streaming frame ingestion/playback."""
+    await websocket.accept()
+    generator = mjpeg_frame_generator(
+        mission_id=mission_id,
+        frame_store=frame_store,
+        fps=fps,
+    )
+    try:
+        async for chunk in generator:
+            await websocket.send_bytes(chunk)
+    except WebSocketDisconnect:
+        logger.debug("WebSocket stream client disconnected for mission '%s'", mission_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("WebSocket stream exception for mission '%s': %s", mission_id, exc)
+
+
+# ============================================================================
+# RECORDING SESSION ENDPOINTS
+# ============================================================================
+
+
+@router.post("/missions/{mission_id}/recording/start", status_code=201)
+def start_recording(
+    mission_id: str,
+    payload: StartRecordingRequest | None = None,
+) -> dict:
+    """Start a recording session for a mission."""
+    camera_id = payload.camera_id if payload else None
+    try:
+        session = recording_manager.start_recording(mission_id, camera_id=camera_id)
+        return {
+            "recording_id": session.recording_id,
+            "mission_id": session.mission_id,
+            "camera_id": session.camera_id,
+            "start_time": session.start_time.isoformat(),
+            "stop_time": None,
+            "status": session.status,
+            "frame_count": session.frame_count,
+            "media_location": session.media_location,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/missions/{mission_id}/recording/stop")
+def stop_recording(
+    mission_id: str,
+    recording_id: str | None = Query(default=None),
+) -> dict:
+    """Stop an active recording session for a mission."""
+    try:
+        session = recording_manager.stop_recording(
+            mission_id, recording_id=recording_id, frame_store=frame_store
+        )
+        return {
+            "recording_id": session.recording_id,
+            "mission_id": session.mission_id,
+            "camera_id": session.camera_id,
+            "start_time": session.start_time.isoformat(),
+            "stop_time": (
+                session.stop_time.isoformat()
+                if session.stop_time is not None
+                else None
+            ),
+            "status": session.status,
+            "frame_count": session.frame_count,
+            "media_location": session.media_location,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/missions/{mission_id}/recording/status")
+def get_recording_status(
+    mission_id: str,
+) -> dict:
+    """Get recording status for a mission."""
+    session = recording_manager.get_status(mission_id)
+    if session is None:
+        return {
+            "mission_id": mission_id,
+            "is_recording": False,
+            "session": None,
+        }
+
+    return {
+        "mission_id": mission_id,
+        "is_recording": session.status == "RECORDING",
+        "session": {
+            "recording_id": session.recording_id,
+            "mission_id": session.mission_id,
+            "camera_id": session.camera_id,
+            "start_time": session.start_time.isoformat(),
+            "stop_time": (
+                session.stop_time.isoformat()
+                if session.stop_time is not None
+                else None
+            ),
+            "status": session.status,
+            "frame_count": session.frame_count,
+            "media_location": session.media_location,
+        },
+    }
+
+
+@router.get("/missions/{mission_id}/recordings")
+def list_recordings(
+    mission_id: str,
+    limit: int = Query(default=100, ge=1, le=1000),
+) -> dict:
+    """List recording sessions for a mission."""
+    records = recording_manager.list_recordings(mission_id, limit=limit)
+    return {
+        "mission_id": mission_id,
+        "count": len(records),
+        "recordings": [
+            {
+                "recording_id": r.recording_id,
+                "mission_id": r.mission_id,
+                "camera_id": r.camera_id,
+                "start_time": r.start_time.isoformat(),
+                "stop_time": (
+                    r.stop_time.isoformat() if r.stop_time is not None else None
+                ),
+                "status": r.status,
+                "frame_count": r.frame_count,
+                "media_location": r.media_location,
+            }
+            for r in records
+        ],
+    }
+
+
+@router.get("/missions/{mission_id}/recordings/{recording_id}")
+def get_recording(
+    mission_id: str,
+    recording_id: str,
+) -> dict:
+    """Retrieve details for a specific recording session."""
+    r = recording_manager.get_recording(mission_id, recording_id)
+    if r is None:
+        raise HTTPException(status_code=404, detail="recording_not_found")
+
+    return {
+        "recording_id": r.recording_id,
+        "mission_id": r.mission_id,
+        "camera_id": r.camera_id,
+        "start_time": r.start_time.isoformat(),
+        "stop_time": r.stop_time.isoformat() if r.stop_time is not None else None,
+        "status": r.status,
+        "frame_count": r.frame_count,
+        "media_location": r.media_location,
+    }
+
+
+# ============================================================================
+# INGESTION ENDPOINTS (EXISTING)
+# ============================================================================
 
 
 class DirectoryIngestionRequest(BaseModel):
@@ -329,8 +728,6 @@ class VideoIngestionRequest(BaseModel):
     camera_id: str | None = Field(default=None, max_length=64)
     auto_create_mission: bool = Field(default=True)
 
-
-from backend.app.config import get_settings
 
 ALLOWED_INGEST_ROOT = get_settings().media_import_root.resolve()
 
@@ -363,9 +760,6 @@ async def ingest_single_image(
             detail=f"Image upload size exceeds maximum allowed limit of {settings.max_upload_size_bytes} bytes",
         )
 
-    # Construct pose if spatial coordinates are explicitly provided.
-    # Per RobotPose specification (robot/localization/models.py), x is the canonical longitudinal
-    # pipe coordinate (x = distance_m).
     pose: RobotPose | None = None
     if x is not None and y is not None and heading_deg is not None:
         pose = RobotPose(
@@ -402,7 +796,9 @@ async def ingest_single_image(
     except InvalidImageContentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Ingestion failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Ingestion failed: {exc}"
+        ) from exc
 
 
 @router.post("/ingest/batch", status_code=201)
@@ -428,8 +824,6 @@ async def ingest_batch_images(
         )
 
     frames: list[CanonicalInspectionFrame] = []
-
-    # Sort images deterministically by filename
     sorted_images = sorted(images, key=lambda f: f.filename or "")
 
     for idx, img in enumerate(sorted_images):
@@ -457,7 +851,9 @@ async def ingest_batch_images(
     except MissionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Batch ingestion failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Batch ingestion failed: {exc}"
+        ) from exc
 
 
 @router.post("/ingest/directory", status_code=201)
@@ -493,7 +889,9 @@ def ingest_directory_images(
     except InvalidImageContentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Directory ingestion failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Directory ingestion failed: {exc}"
+        ) from exc
 
 
 @router.post("/ingest/video", status_code=201)
@@ -535,4 +933,6 @@ def ingest_video_file_endpoint(
     except UnsupportedImageTypeError as exc:
         raise HTTPException(status_code=415, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Video ingestion failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Video ingestion failed: {exc}"
+        ) from exc
