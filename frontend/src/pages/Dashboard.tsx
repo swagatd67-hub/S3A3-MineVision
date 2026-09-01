@@ -65,17 +65,17 @@ export default function Dashboard() {
   const [selectedNode, setSelectedNode] = useState<NetworkNode | null>(NODES[1]);
 
   return (
-    <div className="min-h-screen bg-[#0a1617] text-white p-4 sm:p-6 lg:p-8 font-['Inter'] selection:bg-[#a3e635] selection:text-black">
+    <div className="min-h-screen bg-[#0a1617] text-white p-4 sm:p-6 lg:p-8 font-['Inter'] selection:bg-[#CCFF80] selection:text-black">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#183536]">
         <div>
           <div className="flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-[#a3e635] animate-pulse shadow-[0_0_10px_#a3e635]" />
+            <span className="w-3 h-3 rounded-full bg-[#CCFF80] animate-pulse" />
             <h1 className="font-['Poppins'] text-2xl sm:text-3xl font-black uppercase tracking-wider text-white">
               PipeVision Executive Dashboard
             </h1>
           </div>
-          <p className="text-[#649c96] text-xs sm:text-sm mt-1 font-['Space_Mono']">
+          <p className="text-[#649c96] text-xs sm:text-sm mt-1 font-['Inter']">
             Autonomous Sewer Crawler Fleet • Spatial Reconstruction & Perception Engine
           </p>
         </div>
@@ -87,9 +87,9 @@ export default function Dashboard() {
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1.5 rounded text-xs font-['Space_Mono'] font-bold transition-all ${
+                className={`px-3 py-1.5 rounded text-xs font-['Inter'] font-bold transition-all ${
                   timeframe === tf
-                    ? 'bg-[#5de6ff] text-[#001f25] shadow-[0_0_10px_#5de6ff]'
+                    ? 'bg-[#5de6ff] text-[#001f25]'
                     : 'text-[#649c96] hover:text-white'
                 }`}
               >
@@ -100,7 +100,7 @@ export default function Dashboard() {
 
           <button
             onClick={() => navigate('/missions/M-104/live')}
-            className="px-4 py-2 rounded-lg bg-[#a3e635] hover:bg-[#b6f059] text-black font-['Poppins'] font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(163,230,53,0.3)] cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-[#CCFF80] hover:bg-[#b6f059] text-black font-['Poppins'] font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer"
           >
             <Play className="w-4 h-4 fill-black" />
             <span>Launch Live Cockpit</span>
@@ -112,11 +112,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 my-6">
         <div className="bg-[#0e2425]/90 border border-[#1b3b3a] p-5 rounded-xl shadow-lg hover:border-[#2a5754] transition-all">
           <div className="flex items-center justify-between text-[#649c96] mb-2">
-            <span className="text-xs font-['Space_Mono'] uppercase tracking-wider">Active Survey Network</span>
+            <span className="text-xs font-['Inter'] uppercase tracking-wider">Active Survey Network</span>
             <Activity className="w-4 h-4 text-[#5de6ff]" />
           </div>
-          <div className="font-['Space_Mono'] text-2xl font-black text-white">14.8 km</div>
-          <div className="text-[11px] text-[#a3e635] mt-1 flex items-center gap-1">
+          <div className="font-['Inter'] text-2xl font-black text-white">14.8 km</div>
+          <div className="text-[11px] text-[#CCFF80] mt-1 flex items-center gap-1">
             <ArrowUpRight className="w-3.0 h-3.0" />
             <span>+2.4 km surveyed this week</span>
           </div>
@@ -124,29 +124,29 @@ export default function Dashboard() {
 
         <div className="bg-[#0e2425]/90 border border-[#1b3b3a] p-5 rounded-xl shadow-lg hover:border-[#2a5754] transition-all">
           <div className="flex items-center justify-between text-[#649c96] mb-2">
-            <span className="text-xs font-['Space_Mono'] uppercase tracking-wider">Network Integrity Score</span>
-            <Gauge className="w-4 h-4 text-[#a3e635]" />
+            <span className="text-xs font-['Inter'] uppercase tracking-wider">Network Integrity Score</span>
+            <Gauge className="w-4 h-4 text-[#CCFF80]" />
           </div>
-          <div className="font-['Space_Mono'] text-2xl font-black text-white">92.4%</div>
+          <div className="font-['Inter'] text-2xl font-black text-white">92.4%</div>
           <div className="text-[11px] text-[#649c96] mt-1">Grade 2 • Acceptable Hydraulic Capacity</div>
         </div>
 
         <div className="bg-[#0e2425]/90 border border-[#1b3b3a] p-5 rounded-xl shadow-lg hover:border-[#2a5754] transition-all">
           <div className="flex items-center justify-between text-[#649c96] mb-2">
-            <span className="text-xs font-['Space_Mono'] uppercase tracking-wider">Unresolved Anomalies</span>
+            <span className="text-xs font-['Inter'] uppercase tracking-wider">Unresolved Anomalies</span>
             <AlertTriangle className="w-4 h-4 text-[#ff5449]" />
           </div>
-          <div className="font-['Space_Mono'] text-2xl font-black text-[#ff5449]">9 Defects</div>
+          <div className="font-['Inter'] text-2xl font-black text-[#ff5449]">9 Defects</div>
           <div className="text-[11px] text-[#ff8c82] mt-1">2 Critical • Require Immediate Jetting</div>
         </div>
 
         <div className="bg-[#0e2425]/90 border border-[#1b3b3a] p-5 rounded-xl shadow-lg hover:border-[#2a5754] transition-all">
           <div className="flex items-center justify-between text-[#649c96] mb-2">
-            <span className="text-xs font-['Space_Mono'] uppercase tracking-wider">Crawler Fleet Status</span>
+            <span className="text-xs font-['Inter'] uppercase tracking-wider">Crawler Fleet Status</span>
             <Cpu className="w-4 h-4 text-[#5de6ff]" />
           </div>
-          <div className="font-['Space_Mono'] text-2xl font-black text-[#5de6ff]">3 / 3 Ready</div>
-          <div className="text-[11px] text-[#a3e635] mt-1 flex items-center gap-1">
+          <div className="font-['Inter'] text-2xl font-black text-[#5de6ff]">3 / 3 Ready</div>
+          <div className="text-[11px] text-[#CCFF80] mt-1 flex items-center gap-1">
             <CheckCircle2 className="w-3.0 h-3.0" />
             <span>ROV-01 Currently Active</span>
           </div>
@@ -165,13 +165,13 @@ export default function Dashboard() {
                   <MapPin className="w-4 h-4 text-[#5de6ff]" />
                   <span>Subsurface Pipe Network Graph</span>
                 </h3>
-                <p className="text-[#649c96] text-xs font-['Space_Mono']">
+                <p className="text-[#649c96] text-xs font-['Inter']">
                   Interactive node map • Sector 4B Sewer Trunk Line
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 text-xs font-['Space_Mono']">
-                <span className="px-2.5 py-1 rounded bg-[#a3e635]/10 text-[#a3e635] border border-[#a3e635]/30">
+              <div className="flex items-center gap-2 text-xs font-['Inter']">
+                <span className="px-2.5 py-1 rounded bg-[#CCFF80]/10 text-[#CCFF80] border border-[#CCFF80]/30">
                   Live Sync
                 </span>
               </div>
@@ -194,7 +194,7 @@ export default function Dashboard() {
                 <line x1="70" y1="40" x2="90" y2="75" stroke="#1c4848" strokeWidth="2.5" />
 
                 {/* Animated crawler position */}
-                <circle cx="55" cy="52.5" r="3" fill="#a3e635">
+                <circle cx="55" cy="52.5" r="3" fill="#CCFF80">
                   <animate attributeName="r" values="3;5;3" dur="2s" repeatCount="indefinite" />
                 </circle>
 
@@ -223,7 +223,7 @@ export default function Dashboard() {
                         y={node.y - 7}
                         fill="#9ed4ce"
                         fontSize="3.5"
-                        fontFamily="Space Mono"
+                        fontFamily="Inter"
                         textAnchor="middle"
                       >
                         {node.name}
@@ -234,8 +234,8 @@ export default function Dashboard() {
               </svg>
 
               {/* Crawler Floating Badge */}
-              <div className="absolute top-4 left-4 bg-[#0a1617]/90 backdrop-blur-md border border-[#1e4848] p-3 rounded-lg text-xs font-['Space_Mono'] flex flex-col gap-1">
-                <span className="text-[#a3e635] font-bold flex items-center gap-1.5">
+              <div className="absolute top-4 left-4 bg-[#0a1617]/90 backdrop-blur-md border border-[#1e4848] p-3 rounded-lg text-xs font-['Inter'] flex flex-col gap-1">
+                <span className="text-[#CCFF80] font-bold flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5" /> ROV-01 Crawling
                 </span>
                 <span className="text-[#649c96]">Pipe Segment: MH-114 → MH-116</span>
@@ -244,7 +244,7 @@ export default function Dashboard() {
 
               {/* Selected Node Details Card */}
               {selectedNode && (
-                <div className="absolute bottom-4 right-4 bg-[#0a1617]/95 backdrop-blur-md border border-[#1e4848] p-3.5 rounded-lg text-xs font-['Space_Mono'] max-w-[220px]">
+                <div className="absolute bottom-4 right-4 bg-[#0a1617]/95 backdrop-blur-md border border-[#1e4848] p-3.5 rounded-lg text-xs font-['Inter'] max-w-[220px]">
                   <div className="flex items-center justify-between text-[#5de6ff] font-bold mb-1">
                     <span>{selectedNode.name}</span>
                     <span className="uppercase text-[10px] px-1.5 py-0.5 rounded bg-white/10">
@@ -293,11 +293,11 @@ export default function Dashboard() {
 
             <button
               onClick={() => navigate('/reports')}
-              className="bg-[#0e2425]/90 border border-[#1b3b3a] hover:border-[#a3e635] p-4 rounded-xl flex flex-col gap-2 text-left transition-all group cursor-pointer"
+              className="bg-[#0e2425]/90 border border-[#1b3b3a] hover:border-[#CCFF80] p-4 rounded-xl flex flex-col gap-2 text-left transition-all group cursor-pointer"
             >
               <div className="flex items-center justify-between">
-                <FileText className="w-5 h-5 text-[#a3e635] group-hover:scale-110 transition-transform" />
-                <ArrowUpRight className="w-4 h-4 text-[#649c96] group-hover:text-[#a3e635]" />
+                <FileText className="w-5 h-5 text-[#CCFF80] group-hover:scale-110 transition-transform" />
+                <ArrowUpRight className="w-4 h-4 text-[#649c96] group-hover:text-[#CCFF80]" />
               </div>
               <div className="font-['Poppins'] font-bold text-sm text-white">Inspection Reports</div>
               <div className="text-[#649c96] text-xs">Generate & export engineering reports</div>
@@ -314,7 +314,7 @@ export default function Dashboard() {
                 <AlertTriangle className="w-4 h-4 text-[#ff5449]" />
                 <span>Perception AI Alert Feed</span>
               </h3>
-              <span className="text-[11px] font-['Space_Mono'] text-[#a3e635]">Live</span>
+              <span className="text-[11px] font-['Inter'] text-[#CCFF80]">Live</span>
             </div>
 
             <div className="flex flex-col gap-3">

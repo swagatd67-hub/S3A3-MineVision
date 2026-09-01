@@ -51,7 +51,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
         >
           PIPEVISION
         </Link>
-        <span className="font-['Space_Mono'] text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded border border-white/10 hidden md:inline">
+        <span className="font-['Inter'] text-xs text-white/50 bg-white/5 px-2 py-0.5 rounded border border-white/10 hidden md:inline">
           LIVE COCKPIT
         </span>
       </div>
@@ -74,7 +74,7 @@ export const TopNavBar: React.FC<TopNavBarProps> = ({
         </div>
 
         {/* Camera Status */}
-        <div className="flex items-center gap-2 text-xs font-['Space_Mono'] text-white/70">
+        <div className="flex items-center gap-2 text-xs font-['Inter'] text-white/70">
           <Video className="w-4 h-4 text-white/60" />
           <span className="hidden sm:inline">CAMERA:</span>
           <span className={`font-semibold ${cameraOnline === true ? 'text-[#ccff80]' : cameraOnline === false ? 'text-[#ff8c82]' : 'text-white/50'}`}>{cameraOnline === true ? 'LIVE' : cameraOnline === false ? 'OFFLINE' : 'UNKNOWN'}</span>
