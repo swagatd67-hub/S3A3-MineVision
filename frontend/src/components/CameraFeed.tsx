@@ -30,6 +30,7 @@ interface CameraFeedProps {
   onDrive?: (dir: 'FORWARD' | 'BACKWARD' | 'LEFT' | 'RIGHT') => void;
   onStop?: () => void;
   onToggleLights?: () => void;
+  onStreamStatusChange?: (online: boolean) => void;
 }
 
 export const CameraFeed: React.FC<CameraFeedProps> = ({
@@ -45,6 +46,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   onDrive,
   onStop,
   onToggleLights,
+  onStreamStatusChange,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -58,6 +60,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
 
   const handleChangeCamera = (cam: CameraId) => {
     setStreamError(false);
+    onStreamStatusChange?.(false);
     onChangeCamera(cam);
   };
 
@@ -114,6 +117,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
   const handleRetryStream = () => {
     sounds.playClick('tactile');
     setStreamError(false);
+    onStreamStatusChange?.(false);
     setStreamRetryKey((prev) => prev + 1);
   };
 
@@ -148,9 +152,11 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
             alt={`Live Mission ${missionId} Camera Feed (${activeCamera})`}
             onLoad={() => {
               setStreamError(false);
+              onStreamStatusChange?.(true);
             }}
             onError={() => {
               setStreamError(true);
+              onStreamStatusChange?.(false);
             }}
             className={`w-full h-full object-cover transition-opacity duration-300 ${
               robotState.lightsOn ? 'opacity-95' : 'opacity-40'
@@ -325,7 +331,7 @@ export const CameraFeed: React.FC<CameraFeedProps> = ({
                 </button>
               )}
               <span className="font-['Space_Mono'] text-[10px] text-white/60">
-                DIST: +{robotState.distanceTraveledM.toFixed(1)}m
+                DIST: {robotState.distanceTraveledM == null ? '--' : `+${robotState.distanceTraveledM.toFixed(1)}m`}
               </span>
             </div>
           </div>

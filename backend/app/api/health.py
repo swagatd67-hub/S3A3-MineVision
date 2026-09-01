@@ -31,6 +31,12 @@ def liveness_check() -> dict:
         "service": "pipevision-api",
         "version": "0.2.0",
         "environment": settings.environment,
+        "runtime_mode": (
+            "HARDWARE"
+            if settings.robot_hardware_enabled
+            and settings.robot_transport_type not in {"sim", "simulator"}
+            else "SIMULATOR"
+        ),
     }
 
 

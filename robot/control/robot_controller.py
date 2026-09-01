@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 from typing import Any
 
@@ -171,6 +172,9 @@ class RobotController:
         """Send movement command with strict velocity limits checking."""
         self._ensure_command_allowed("Movement")
 
+        if not math.isfinite(linear) or not math.isfinite(angular):
+            raise ControllerValidationError("Movement values must be finite numbers.")
+
         if abs(linear) > self.max_linear_speed:
             raise ControllerValidationError(
                 f"Linear speed {linear} exceeds maximum allowed speed of {self.max_linear_speed}."
@@ -193,6 +197,8 @@ class RobotController:
     def camera_pan(self, angle_deg: float) -> None:
         """Pan camera to specified angle in degrees."""
         self._ensure_command_allowed("Camera pan")
+        if not math.isfinite(angle_deg):
+            raise ControllerValidationError("Camera pan angle must be finite.")
         self._send_command("CAMERA_PAN", {"angle_deg": angle_deg})
 
     def clean_start(self, mode: str) -> None:
@@ -218,6 +224,8 @@ class RobotController:
     def inflate(self, target_pressure_kpa: float) -> None:
         """Inflate robot crawler element to target pressure in kPa."""
         self._ensure_command_allowed("Inflate")
+        if not math.isfinite(target_pressure_kpa):
+            raise ControllerValidationError("Inflation pressure must be finite.")
         self._send_command(
             "INFLATE", {"target_pressure_kpa": target_pressure_kpa}
         )
@@ -230,6 +238,8 @@ class RobotController:
     def hold_pressure(self, target_pressure_kpa: float) -> None:
         """Maintain target pressure in kPa."""
         self._ensure_command_allowed("Hold pressure")
+        if not math.isfinite(target_pressure_kpa):
+            raise ControllerValidationError("Hold pressure value must be finite.")
         self._send_command(
             "HOLD_PRESSURE", {"target_pressure_kpa": target_pressure_kpa}
         )

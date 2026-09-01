@@ -2,8 +2,10 @@
 
 from fastapi.testclient import TestClient
 
+from backend.app.db import init_db
 from backend.app.main import app
 
+init_db()
 client = TestClient(app)
 
 

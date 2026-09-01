@@ -1,13 +1,19 @@
-from __future__ import annotations
-
 import csv
 from pathlib import Path
+from typing import Any
 
-import torch
 from PIL import Image
-from torch import Tensor
-from torch.utils.data import Dataset
-from torchvision import transforms
+
+try:
+    import torch
+    from torch import Tensor
+    from torch.utils.data import Dataset
+    from torchvision import transforms
+except ImportError:
+    torch = None
+    Tensor = Any  # type: ignore[misc, assignment]
+    Dataset = object  # type: ignore[misc, assignment]
+    transforms = None
 
 DEFECT_CLASSES = [
     "RB",

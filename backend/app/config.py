@@ -7,6 +7,7 @@ import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field
 load_dotenv()
 
 EnvironmentType = Literal["development", "test", "production"]
+CameraSourceType = Literal["simulator", "esp32cam"]
 
 
 class ConfigurationError(ValueError):
@@ -58,6 +60,35 @@ class Settings(BaseModel):
     allowed_hosts: list[str] = Field(default_factory=lambda: ["*"])
     secret_key: str | None = Field(default=None)
 
+    # Hardware Integration Settings
+    robot_transport_type: str = Field(default="simulator")
+    robot_host: str = Field(default="192.168.1.100")
+    robot_port: int = Field(default=5000, ge=1, le=65535)
+    robot_serial_port: str = Field(default="/dev/ttyUSB0")
+    robot_baudrate: int = Field(default=115200, ge=1200, le=4000000)
+    # When True, RPi transport logs commands but never opens a real socket.
+    # Defaults to True so developers can work safely without physical hardware.
+    robot_dry_run: bool = Field(default=True)
+    robot_hardware_enabled: bool = Field(default=False)
+    # GPIO is opt-in; servo pin/limit configuration is JSON so each deployment
+    # can provide its own board wiring and calibration.
+    robot_gpio_enabled: bool = Field(default=False)
+    robot_servo_config_json: str | None = Field(default=None)
+    robot_pico_uart_enabled: bool = Field(default=False)
+    robot_pico_uart_port: str = Field(default="")
+    robot_pico_uart_baudrate: int = Field(default=115200, ge=1200, le=4000000)
+    robot_pico_uart_timeout_s: float = Field(default=1.0, gt=0)
+    robot_mpu6050_enabled: bool = Field(default=False)
+    robot_mpu6050_i2c_bus: int = Field(default=1, ge=0)
+    robot_mpu6050_i2c_address: int = Field(default=0x68, ge=0x03, le=0x77)
+    robot_mpu6050_accelerometer_scale_g: int = Field(default=2)
+    robot_mpu6050_gyroscope_scale_dps: int = Field(default=250)
+
+    # Video source selection. Simulator is deliberately the safe default.
+    camera_source_type: CameraSourceType = Field(default="simulator")
+    esp32_cam_url: str | None = Field(default=None)
+    esp32_cam_timeout_s: float = Field(default=3.0, gt=0)
+
     # Resource & Processing Limits
     max_upload_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     max_batch_image_count: int = Field(default=500, ge=1, le=5000)
@@ -80,6 +111,20 @@ class Settings(BaseModel):
 
     def validate_environment(self) -> None:
         """Validate production configuration strictness rules."""
+        if self.robot_pico_uart_enabled and not self.robot_pico_uart_port.strip():
+            raise ConfigurationError(
+                "ROBOT_PICO_UART_PORT must be configured when Pico UART is enabled."
+            )
+
+        if self.camera_source_type == "esp32cam":
+            if not self.esp32_cam_url:
+                raise ConfigurationError(
+                    "ESP32_CAM_URL must be configured when CAMERA_SOURCE_TYPE=esp32cam."
+                )
+            parsed_url = urlparse(self.esp32_cam_url)
+            if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                raise ConfigurationError("ESP32_CAM_URL must be a valid HTTP(S) URL.")
+
         if self.is_production:
             if self.debug:
                 raise ConfigurationError(
@@ -186,6 +231,27 @@ def load_settings_from_env() -> Settings:
         cors_origins=_parse_list_env(os.getenv("CORS_ORIGINS"), default_cors),
         allowed_hosts=_parse_list_env(os.getenv("ALLOWED_HOSTS"), default_hosts),
         secret_key=os.getenv("SECRET_KEY"),
+        robot_transport_type=os.getenv("ROBOT_TRANSPORT_TYPE", "simulator").lower(),
+        robot_host=os.getenv("ROBOT_HOST", "192.168.1.100"),
+        robot_port=int(os.getenv("ROBOT_PORT", "5000")),
+        robot_serial_port=os.getenv("ROBOT_SERIAL_PORT", "/dev/ttyUSB0"),
+        robot_baudrate=int(os.getenv("ROBOT_BAUDRATE", "115200")),
+        robot_dry_run=_parse_bool_env(os.getenv("ROBOT_DRY_RUN"), True),
+        robot_hardware_enabled=_parse_bool_env(os.getenv("ROBOT_HARDWARE_ENABLED"), False),
+        robot_gpio_enabled=_parse_bool_env(os.getenv("ROBOT_GPIO_ENABLED"), False),
+        robot_servo_config_json=os.getenv("ROBOT_SERVO_CONFIG_JSON"),
+        robot_pico_uart_enabled=_parse_bool_env(os.getenv("ROBOT_PICO_UART_ENABLED"), False),
+        robot_pico_uart_port=os.getenv("ROBOT_PICO_UART_PORT", ""),
+        robot_pico_uart_baudrate=int(os.getenv("ROBOT_PICO_UART_BAUDRATE", "115200")),
+        robot_pico_uart_timeout_s=float(os.getenv("ROBOT_PICO_UART_TIMEOUT_S", "1.0")),
+        robot_mpu6050_enabled=_parse_bool_env(os.getenv("ROBOT_MPU6050_ENABLED"), False),
+        robot_mpu6050_i2c_bus=int(os.getenv("ROBOT_MPU6050_I2C_BUS", "1")),
+        robot_mpu6050_i2c_address=int(os.getenv("ROBOT_MPU6050_I2C_ADDRESS", "104"), 0),
+        robot_mpu6050_accelerometer_scale_g=int(os.getenv("ROBOT_MPU6050_ACCELEROMETER_SCALE_G", "2")),
+        robot_mpu6050_gyroscope_scale_dps=int(os.getenv("ROBOT_MPU6050_GYROSCOPE_SCALE_DPS", "250")),
+        camera_source_type=os.getenv("CAMERA_SOURCE_TYPE", "simulator").lower(),
+        esp32_cam_url=os.getenv("ESP32_CAM_URL"),
+        esp32_cam_timeout_s=float(os.getenv("ESP32_CAM_TIMEOUT_S", "3.0")),
         max_upload_size_bytes=int(
             os.getenv("MAX_UPLOAD_SIZE_BYTES", str(50 * 1024 * 1024))
         ),

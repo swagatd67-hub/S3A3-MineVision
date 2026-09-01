@@ -48,7 +48,11 @@ from backend.app.services.video.snapshot_store import (
     SnapshotRecord,
     SnapshotStore,
 )
-from backend.app.services.video.streaming import mjpeg_frame_generator
+from backend.app.services.video.source import ESP32CAMSource
+from backend.app.services.video.streaming import (
+    esp32cam_mjpeg_proxy,
+    mjpeg_frame_generator,
+)
 from robot.localization.models import LocalizationQuality, RobotPose
 
 logger = logging.getLogger(__name__)
@@ -82,10 +86,12 @@ class StartRecordingRequest(BaseModel):
 
 @router.get("/health")
 def video_health() -> dict:
+    settings = get_settings()
     return {
         "service": "video",
         "status": "ready",
-        "supported_sources": ["file", "webcam"],
+        "supported_sources": ["simulator", "esp32cam"],
+        "configured_source": settings.camera_source_type,
         "image_storage": True,
         "detection_pipeline": True,
         "snapshots": True,
@@ -527,6 +533,22 @@ def get_live_stream(
     Note: Exposes stored or simulated mission frames as a development/playback stream
     when dedicated hardware video sources are offline.
     """
+    settings = get_settings()
+    if settings.camera_source_type == "esp32cam":
+        # URL and endpoint shape are deployment configuration; this backend
+        # proxies the bytes without assuming a particular ESP32-CAM firmware.
+        source = ESP32CAMSource(
+            settings.esp32_cam_url or "",
+            timeout_s=settings.esp32_cam_timeout_s,
+        )
+        return StreamingResponse(
+            esp32cam_mjpeg_proxy(
+                source,
+                fallback_text=f"ESP32-CAM OFFLINE [{camera_id}]",
+            ),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+        )
+
     return StreamingResponse(
         mjpeg_frame_generator(
             mission_id=mission_id,
@@ -547,6 +569,21 @@ async def websocket_stream(
 ):
     """WebSocket endpoint for real-time streaming frame ingestion/playback."""
     await websocket.accept()
+    settings = get_settings()
+    if settings.camera_source_type == "esp32cam":
+        source = ESP32CAMSource(
+            settings.esp32_cam_url or "",
+            timeout_s=settings.esp32_cam_timeout_s,
+        )
+        try:
+            async for chunk in esp32cam_mjpeg_proxy(source):
+                await websocket.send_bytes(chunk)
+        except WebSocketDisconnect:
+            logger.debug("ESP32-CAM websocket client disconnected for mission '%s'", mission_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("ESP32-CAM websocket exception for mission '%s': %s", mission_id, exc)
+        return
+
     generator = mjpeg_frame_generator(
         mission_id=mission_id,
         frame_store=frame_store,

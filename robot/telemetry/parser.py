@@ -133,7 +133,7 @@ def parse_telemetry(raw: dict[str, Any] | str | None) -> RobotTelemetry | None:
             raise TelemetryValidationError("Field 'imu' must be a dictionary.")
 
         imu_fields = ("ax", "ay", "az", "gx", "gy", "gz")
-        imu_vals: dict[str, float] = {}
+        imu_vals: dict[str, float | None] = {}
         for f in imu_fields:
             val = imu_raw.get(f)
             if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
@@ -141,6 +141,9 @@ def parse_telemetry(raw: dict[str, Any] | str | None) -> RobotTelemetry | None:
                     f"IMU field '{f}' must be numeric, got {val!r}."
                 )
             imu_vals[f] = float(val)
+
+        imu_temperature = _get_float_or_none(imu_raw, "temperature_c")
+        imu_vals["temperature_c"] = imu_temperature
 
         imu_obj = IMUData(**imu_vals)
 

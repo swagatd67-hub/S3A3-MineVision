@@ -91,6 +91,20 @@ The physical robot must connect to PipeVision via an implementation of `RobotTra
 - **`SerialTransport`**: Suitable for tethered UART/USB connections (JSON packets over serial line).
 - **`SimulatorTransport`**: Software reference transport used for testing, CI, and hardware emulation.
 
+### 3.1.1 Optional Raspberry Pi ↔ Pico UART
+
+`robot.transport.pico_uart` contains the optional `PicoUartLink` foundation for
+a future Raspberry Pi 4 to Raspberry Pi Pico connection. It is separate from
+the existing `SerialTransport` because the Pico link uses its own versioned
+JSON-lines envelope (`protocol`, `version`, `kind`, and `payload`).
+
+The link is disabled by default. Before enabling it, configure
+`ROBOT_PICO_UART_ENABLED=true`, `ROBOT_PICO_UART_PORT`, and the baud rate and
+timeout in `.env`. Simulator transport does not construct or open this link.
+The current implementation sends no motor commands and contains no
+TB6612FNG driver; servo locomotion remains on the existing Raspberry Pi path.
+Pico firmware and its command semantics remain future work.
+
 ### 3.2 Transport Interface Contract
 
 Every hardware transport implementation must adhere to the abstract `RobotTransport` interface:

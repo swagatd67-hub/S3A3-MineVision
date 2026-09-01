@@ -1,5 +1,6 @@
 """PipeVision Robot Telemetry Package."""
 
+from robot.imu.mpu6050 import RawIMUReading
 from robot.telemetry.exceptions import (
     TelemetryError,
     TelemetryParseError,
@@ -20,6 +21,7 @@ from robot.telemetry.parser import parse_telemetry
 __all__ = [
     "IMUData",
     "PressureData",
+    "RawIMUReading",
     "RobotTelemetry",
     "TelemetryError",
     "TelemetryManager",

@@ -10,6 +10,7 @@ class IMUData(BaseModel):
     gx: float
     gy: float
     gz: float
+    temperature_c: float | None = None
 
 
 class PressureData(BaseModel):

@@ -10,8 +10,35 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from backend.app.services.video.frame_store import FrameMetadataStore
+from backend.app.services.video.source import ESP32CAMSource
 
 logger = logging.getLogger(__name__)
+
+
+async def esp32cam_mjpeg_proxy(
+    source: ESP32CAMSource,
+    fallback_text: str = "ESP32-CAM OFFLINE",
+) -> AsyncGenerator[bytes, None]:
+    """Proxy configured camera bytes without interpreting firmware endpoints."""
+    sent_data = False
+    try:
+        iterator = source.mjpeg_chunks()
+        while True:
+            chunk = await asyncio.to_thread(next, iterator, None)
+            if chunk is None:
+                break
+            sent_data = True
+            yield chunk
+    except (asyncio.CancelledError, GeneratorExit):
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ESP32-CAM proxy stopped: %s", exc)
+    finally:
+        source.close()
+
+    if not sent_data:
+        jpeg_bytes = generate_placeholder_jpeg(fallback_text)
+        yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
 
 
 def generate_placeholder_jpeg(
