@@ -12,8 +12,13 @@ from backend.app.services.robot.manager import (
 from robot.gateway.adapter import RobotGatewayAdapter
 from robot.transport.base import InvalidMessageError, TransportNotConnectedError
 from robot.transport.raspberry_pi import RaspberryPiHardwareTransport
+from robot.transport.servo import (
+    GpioZeroServoDriver,
+    ServoConfig,
+    ServoError,
+    ServoRigConfig,
+)
 from robot.transport.simulator import SimulatorTransport
-from robot.transport.servo import GpioZeroServoDriver, ServoConfig, ServoError, ServoRigConfig
 
 
 def test_raspberry_pi_hardware_transport_lifecycle() -> None:
