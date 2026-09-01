@@ -12,6 +12,7 @@ export interface TelemetryIMU {
   gx: number;
   gy: number;
   gz: number;
+  temperature_c?: number | null;
 }
 
 export interface TelemetryPressure {

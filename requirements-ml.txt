@@ -12,16 +12,18 @@
 # The versions below were verified against CUDA 12.6 on the
 # current dev machine.  Install from the PyTorch index:
 #
-#   pip install torch==2.8.0+cu126 torchvision==0.23.0+cu126 \
+#   pip install torch==2.9.1+cu126 torchvision==0.24.1+cu126 \
 #       --index-url https://download.pytorch.org/whl/cu126
 #
 # If you are on CPU-only, substitute the appropriate index URL
 # from https://pytorch.org/get-started/locally/
 # ─────────────────────────────────────────────────────────────
 
+--extra-index-url https://download.pytorch.org/whl/cu126
+
 # --- Deep learning --------------------------------------------------------
-torch==2.8.0+cu126
-torchvision==0.23.0+cu126
+torch==2.9.1+cu126
+torchvision==0.24.1+cu126
 
 # --- Computer vision ------------------------------------------------------
 opencv-python>=5.0,<6

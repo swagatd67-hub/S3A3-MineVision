@@ -11,8 +11,8 @@ export interface RobotDriveState {
   lightsOn: boolean;
   isReady?: boolean;
   tetherLengthM: number;
-  distanceTraveledM: number;
-  batteryPercent: number;
+  distanceTraveledM: number | null;
+  batteryPercent: number | null;
   isArmed: boolean;
   emergencyStop: boolean;
 }

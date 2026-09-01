@@ -13,23 +13,29 @@ Robot sensors --> MCU --> Robot Gateway --wireless--> PipeVision
 Robot camera --> Robot Computer --video--> PipeVision
 PipeVision --> AI / Mapping / Water / Cleaning / Digital Twin
 
-## Run locally
+## Run locally (quickstart)
 
+1. Create and activate a virtual environment
+   - Windows (PowerShell): `python -m venv .venv` then `.venv\Scripts\Activate.ps1`
+   - Windows (cmd): `python -m venv .venv` then `.venv\Scripts\activate`
+   - Linux/macOS: `python3 -m venv .venv` then `source .venv/bin/activate`
+
+2. Install dependencies and run the API
 ```bash
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Linux/macOS: source .venv/bin/activate
 pip install -r backend/requirements.txt
-uvicorn backend.app.main:app --reload
+uvicorn backend.app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 Open http://127.0.0.1:8000/docs
 
-Simulator:
+## Simulator
 
+Run the local robot simulator:
 ```bash
 python robot/simulator/simulator.py
 ```
 
-## Day 3.2
-Telemetry is now scoped to inspection missions. Existing rows remain legacy/null until a deliberate backfill.
+## Notes
+
+- Use Python 3.10+.
+- Telemetry is scoped to inspection missions; legacy rows remain null until backfilled.

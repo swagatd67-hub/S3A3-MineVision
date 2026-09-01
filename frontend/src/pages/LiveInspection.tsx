@@ -17,6 +17,7 @@ import { HelpView } from '../components/HelpView';
 import { playSound } from '../utils/audio';
 
 import { telemetryWsClient } from '../api/telemetryWs';
+import { getBackendHealth, type RuntimeMode } from '../api/system';
 import { getMission } from '../api/missions';
 import { sendRobotCommand, sendEmergencyStop } from '../api/robot';
 import {
@@ -32,7 +33,6 @@ import type {
   RobotDriveState,
   DriveCommand,
   SensorData,
-  IMUData,
   DefectDetection,
   CameraId,
 } from '../types';
@@ -43,6 +43,7 @@ import type {
 import type {
   TelemetryData,
   WebSocketConnectionStatus,
+  TelemetryIMU,
 } from '../types/telemetry';
 
 export default function LiveInspection() {
@@ -79,6 +80,9 @@ export default function LiveInspection() {
   const [wsStatus, setWsStatus] = useState<WebSocketConnectionStatus>('DISCONNECTED');
   const [activeRobotId, setActiveRobotId] = useState<string>('ROV-01');
   const [missionRobotId, setMissionRobotId] = useState<string>('ROV-01');
+  const [runtimeMode, setRuntimeMode] = useState<RuntimeMode>('UNKNOWN');
+  const [cameraOnline, setCameraOnline] = useState<boolean | null>(null);
+  const [hasRealTelemetry, setHasRealTelemetry] = useState(false);
 
 
 
@@ -108,29 +112,21 @@ export default function LiveInspection() {
   }));
 
   // IMU Data
-  const [imuData, setImuData] = useState<IMUData>({
-    accel: { x: 0.02, y: -0.01, z: 0.98 },
-    accelX: 0.02,
-    accelY: -0.01,
-    accelZ: 0.98,
-    gyro: { x: 0.1, y: 0.2, z: -0.1 },
-    gyroX: 0.1,
-    gyroY: 0.2,
-    gyroZ: -0.1,
-    pitchDeg: 1.2,
-    rollDeg: -0.4,
-    yawDeg: 87.5,
-    orientation: {
-      pitch: 1.2,
-      roll: -0.4,
-      yaw: 87.5,
-    },
-    historyAccel: [
-      { x: 0.01, y: 0, z: 0.99 },
-      { x: 0.02, y: -0.01, z: 0.98 },
-      { x: 0.03, y: 0.01, z: 0.97 },
-    ],
+  const [imuData, setImuData] = useState<TelemetryIMU | null>({
+    ax: 0.02, ay: -0.01, az: 9.61, gx: 0.1, gy: 0.2, gz: -0.1,
   });
+
+  useEffect(() => {
+    let mounted = true;
+    getBackendHealth()
+      .then((health) => {
+        if (mounted) setRuntimeMode(health.runtime_mode ?? 'UNKNOWN');
+      })
+      .catch(() => {
+        if (mounted) setRuntimeMode('UNKNOWN');
+      });
+    return () => { mounted = false; };
+  }, []);
 
   // Defect Detections
   const [defects] = useState<DefectDetection[]>([
@@ -357,6 +353,7 @@ export default function LiveInspection() {
         return;
       }
       lastTimestampMsRef.current = packetTimeMs;
+      setHasRealTelemetry(true);
 
       latestTelemetryPacketRef.current = packet;
     });
@@ -395,32 +392,7 @@ export default function LiveInspection() {
             return updated;
           });
 
-          if (data.imu) {
-            const { ax, ay, az, gx, gy, gz } = data.imu;
-            const pitchRad = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
-            const rollRad = Math.atan2(ay, az);
-            const pitchDeg = pitchRad * (180 / Math.PI);
-            const rollDeg = rollRad * (180 / Math.PI);
-
-            setImuData((prev) => ({
-              ...prev,
-              accel: { x: ax, y: ay, z: az },
-              accelX: ax,
-              accelY: ay,
-              accelZ: az,
-              gyro: { x: gx, y: gy, z: gz },
-              gyroX: gx,
-              gyroY: gy,
-              gyroZ: gz,
-              pitchDeg,
-              rollDeg,
-              orientation: {
-                pitch: pitchDeg,
-                roll: rollDeg,
-                yaw: prev.yawDeg,
-              },
-            }));
-          }
+          setImuData(data.imu ?? null);
 
 
         }
@@ -621,6 +593,11 @@ export default function LiveInspection() {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenGallery={() => setIsSnapshotDrawerOpen(true)}
         snapshotCount={snapshots.length}
+        runtimeMode={runtimeMode}
+        connectionStatus={wsStatus}
+        cameraOnline={cameraOnline}
+        imuAvailable={imuData !== null}
+        telemetryDataLabel={runtimeMode === 'SIMULATOR' ? 'SIMULATOR DATA' : hasRealTelemetry ? 'LIVE HARDWARE DATA' : 'DEMO FALLBACK'}
       />
 
       {/* Transient Notification Toast */}
@@ -728,6 +705,7 @@ export default function LiveInspection() {
                     onDrive={handleDriveCommand}
                     onStop={() => handleDriveCommand('IDLE')}
                     onToggleLights={handleToggleLights}
+                    onStreamStatusChange={setCameraOnline}
                   />
 
                   {/* Robot Control Console Component */}
@@ -762,7 +740,7 @@ export default function LiveInspection() {
                   </div>
 
                   {/* IMU Sensor Panel Component */}
-                  <MPU6050Panel imuData={imuData} />
+                  <MPU6050Panel imuData={imuData} dataIsSimulated={!hasRealTelemetry || runtimeMode === 'SIMULATOR'} />
                 </div>
               </div>
             </div>

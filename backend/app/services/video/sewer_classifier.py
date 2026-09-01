@@ -11,15 +11,23 @@ from typing import Any, Protocol
 
 import cv2
 import numpy as np
-import torch
 from PIL import Image
-from torchvision import transforms
 
 from backend.app.services.video.sewer_dataset import DEFECT_CLASSES
-from backend.app.services.video.sewer_model import (
-    SewerDefectClassifier,
-    load_sewer_classifier,
-)
+
+try:
+    import torch
+    from torchvision import transforms
+
+    from backend.app.services.video.sewer_model import (
+        SewerDefectClassifier,
+        load_sewer_classifier,
+    )
+except ImportError:
+    torch = None
+    transforms = None
+    SewerDefectClassifier = None
+    load_sewer_classifier = None
 
 logger = logging.getLogger(__name__)
 

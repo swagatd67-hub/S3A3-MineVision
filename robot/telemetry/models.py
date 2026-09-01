@@ -21,6 +21,7 @@ class IMUData:
     gx: float
     gy: float
     gz: float
+    temperature_c: float | None = None
 
 
 @dataclass(frozen=True)

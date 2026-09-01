@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import datetime, timezone
 from threading import Lock
 from typing import Any
 
+from backend.app.config import get_settings
 from backend.app.schemas.robot import RobotCommandResponse
 from robot.control.robot_controller import ControllerValidationError
 from robot.gateway.adapter import RobotGatewayAdapter
-from robot.transport.simulator import SimulatorTransport
+from robot.transport.base import RobotTransport
+from robot.transport.factory import create_transport
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +32,35 @@ SUPPORTED_COMMANDS = {
 }
 
 
+def create_transport_from_config(
+    robot_id: str,
+    mission_id: str | None = None,
+    transport_type: str | None = None,
+) -> RobotTransport:
+    """Create a RobotTransport based on app settings or an explicit transport_type.
+
+    This is a thin shim over :func:`robot.transport.factory.create_transport`
+    that reads connection parameters from the application :class:`~backend.app.config.Settings`.
+    """
+    settings = get_settings()
+    return create_transport(
+        robot_id=robot_id,
+        mission_id=mission_id,
+        transport_type=transport_type,
+        host=settings.robot_host,
+        port=settings.robot_port,
+        dry_run=settings.robot_dry_run,
+        hardware_enabled=settings.robot_hardware_enabled,
+        # The factory enforces this separately so disabled mode cannot be
+        # bypassed by ROBOT_DRY_RUN=false.
+        gpio_enabled=settings.robot_gpio_enabled and settings.robot_hardware_enabled,
+        imu_enabled=settings.robot_mpu6050_enabled and settings.robot_hardware_enabled,
+        servo_config=None,
+        serial_port=settings.robot_serial_port,
+        baudrate=settings.robot_baudrate,
+    )
+
+
 class RobotManager:
     """Manager managing robot gateway/controller connections and command routing."""
 
@@ -36,15 +68,24 @@ class RobotManager:
         self._adapters: dict[str, RobotGatewayAdapter] = {}
         self._lock = Lock()
 
-    def get_adapter(self, robot_id: str, mission_id: str | None = None) -> RobotGatewayAdapter:
+    def get_adapter(
+        self,
+        robot_id: str,
+        mission_id: str | None = None,
+        transport_type: str | None = None,
+        transport: RobotTransport | None = None,
+    ) -> RobotGatewayAdapter:
         """Get or create connected RobotGatewayAdapter for a given robot_id."""
         with self._lock:
             adapter = self._adapters.get(robot_id)
             if adapter is None or not adapter.is_connected:
-                logger.info("Initializing SimulatorTransport for robot_id=%s", robot_id)
-                transport = SimulatorTransport(robot_id=robot_id, mission_id=mission_id or "MISSION-ACTIVE")
+                resolved_transport = transport or create_transport_from_config(
+                    robot_id=robot_id,
+                    mission_id=mission_id,
+                    transport_type=transport_type,
+                )
                 adapter = RobotGatewayAdapter(
-                    transport=transport,
+                    transport=resolved_transport,
                     robot_id=robot_id,
                     mission_id=mission_id,
                 )
@@ -70,9 +111,27 @@ class RobotManager:
         adapter = self.get_adapter(robot_id, mission_id=mission_id)
         args = arguments or {}
 
+        def required_float(name: str) -> float:
+            value = args.get(name)
+            if value is None or isinstance(value, bool):
+                raise ControllerValidationError(
+                    f"Command '{cmd_upper}' requires numeric argument '{name}'."
+                )
+            try:
+                result = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ControllerValidationError(
+                    f"Command '{cmd_upper}' argument '{name}' must be numeric."
+                ) from exc
+            if not math.isfinite(result):
+                raise ControllerValidationError(
+                    f"Command '{cmd_upper}' argument '{name}' must be finite."
+                )
+            return result
+
         if cmd_upper == "MOVE":
-            linear = float(args.get("linear", 0.0))
-            angular = float(args.get("angular", 0.0))
+            linear = required_float("linear")
+            angular = required_float("angular")
             adapter.move(linear, angular)
 
         elif cmd_upper == "STOP":
@@ -82,11 +141,15 @@ class RobotManager:
             adapter.emergency_stop()
 
         elif cmd_upper == "CAMERA_PAN":
-            angle_deg = float(args.get("angle_deg", 0.0))
+            angle_deg = required_float("angle_deg")
             adapter.camera_pan(angle_deg)
 
         elif cmd_upper == "CLEAN_START":
-            mode = str(args.get("mode", "DEFAULT"))
+            mode = args.get("mode")
+            if not isinstance(mode, str) or not mode.strip():
+                raise ControllerValidationError(
+                    "Command 'CLEAN_START' requires a non-empty string argument 'mode'."
+                )
             adapter.clean_start(mode)
 
         elif cmd_upper == "CLEAN_STOP":
@@ -99,14 +162,14 @@ class RobotManager:
             adapter.sample_close()
 
         elif cmd_upper == "INFLATE":
-            target_pressure = float(args.get("target_pressure_kpa", 150.0))
+            target_pressure = required_float("target_pressure_kpa")
             adapter.inflate(target_pressure)
 
         elif cmd_upper == "DEFLATE":
             adapter.deflate()
 
         elif cmd_upper == "HOLD_PRESSURE":
-            target_pressure = float(args.get("target_pressure_kpa", 150.0))
+            target_pressure = required_float("target_pressure_kpa")
             adapter.hold_pressure(target_pressure)
 
         controller_state = adapter.controller.state.value if adapter.controller else "UNKNOWN"

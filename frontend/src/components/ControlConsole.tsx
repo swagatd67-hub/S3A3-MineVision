@@ -77,7 +77,7 @@ export const ControlConsole: React.FC<ControlConsoleProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <span className="text-[#5de6ff] font-bold">DIST: {robotState.distanceTraveledM.toFixed(1)}m</span>
+            <span className="text-[#5de6ff] font-bold">DIST: {robotState.distanceTraveledM == null ? '--' : `${robotState.distanceTraveledM.toFixed(1)}m`}</span>
           </div>
         </div>
       </div>

@@ -36,7 +36,7 @@ python-dotenv, pytest, ruff, httpx, websocket-client, python-multipart.
 ```bash
 # Step 1 — Install PyTorch + TorchVision for your CUDA version.
 # The line below targets CUDA 12.6 (verified on the current dev machine).
-pip install torch==2.8.0+cu126 torchvision==0.23.0+cu126 \
+pip install torch==2.9.1+cu126 torchvision==0.24.1+cu126 \
     --index-url https://download.pytorch.org/whl/cu126
 
 # Step 2 — Install the remaining ML packages.

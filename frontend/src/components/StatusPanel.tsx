@@ -27,7 +27,7 @@ export const StatusPanel: React.FC<StatusPanelProps> = ({
         </div>
         <span className="text-white/30 text-xs">•</span>
         <span className="font-['Space_Mono'] text-xs sm:text-sm font-bold text-[#5de6ff] tracking-wider">
-          {robotState.distanceTraveledM.toFixed(1)}m
+          {robotState.distanceTraveledM == null ? '--' : `${robotState.distanceTraveledM.toFixed(1)}m`}
         </span>
       </div>
 
