@@ -84,19 +84,7 @@ export default function LiveInspection() {
   const [cameraOnline, setCameraOnline] = useState<boolean | null>(null);
   const [hasRealTelemetry, setHasRealTelemetry] = useState(false);
 
-  // Pressure & Water Quality Real Telemetry State
-  const [pressureData, setPressureData] = useState({
-    body_kpa: 101.3,
-    front_anchor_kpa: 180.0,
-    rear_anchor_kpa: 175.0,
-  });
 
-  const [waterData, setWaterData] = useState({
-    temperature_c: 22.5,
-    ph: 7.2,
-    conductivity_ms_cm: 1.4,
-    turbidity_ntu: 15.0,
-  });
 
   // Robot State
   const [robotState, setRobotState] = useState<RobotDriveState>({
@@ -406,22 +394,7 @@ export default function LiveInspection() {
 
           setImuData(data.imu ?? null);
 
-          if (data.pressure) {
-            setPressureData({
-              body_kpa: data.pressure.body_kpa ?? 101.3,
-              front_anchor_kpa: data.pressure.front_anchor_kpa ?? 180.0,
-              rear_anchor_kpa: data.pressure.rear_anchor_kpa ?? 175.0,
-            });
-          }
 
-          if (data.water) {
-            setWaterData({
-              temperature_c: data.water.temperature_c ?? 22.5,
-              ph: data.water.ph ?? 7.2,
-              conductivity_ms_cm: data.water.conductivity_ms_cm ?? 1.4,
-              turbidity_ntu: data.water.turbidity_ntu ?? 15.0,
-            });
-          }
         }
         lastRenderTime = now;
       }
@@ -755,51 +728,7 @@ export default function LiveInspection() {
                     onChangeLightIntensity={setLightIntensity}
                   />
 
-                  {/* Real Water Quality & Pressure Telemetry Panel */}
-                  <div className="bg-[#141619] rounded-xl p-4 sm:p-5 flex flex-col gap-3 border border-white/10 shadow-lg">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                      <span className="font-['Space_Mono'] text-xs font-bold text-[#5de6ff] tracking-widest uppercase">
-                        REAL TELEMETRY SENSORS
-                      </span>
-                      <span className="text-[10px] font-['Space_Mono'] text-[#a3e635] font-bold">
-                        WS LIVE
-                      </span>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 font-['Space_Mono'] text-xs">
-                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
-                        <span className="text-[10px] text-[#649c96]">Water Temp</span>
-                        <span className="text-white font-bold">{waterData.temperature_c.toFixed(1)} °C</span>
-                      </div>
-                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
-                        <span className="text-[10px] text-[#649c96]">pH Level</span>
-                        <span className="text-white font-bold">{waterData.ph.toFixed(2)}</span>
-                      </div>
-                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
-                        <span className="text-[10px] text-[#649c96]">Conductivity</span>
-                        <span className="text-white font-bold">{waterData.conductivity_ms_cm.toFixed(1)} mS/cm</span>
-                      </div>
-                      <div className="bg-black/40 p-2 rounded border border-white/5 flex flex-col">
-                        <span className="text-[10px] text-[#649c96]">Turbidity</span>
-                        <span className="text-white font-bold">{waterData.turbidity_ntu.toFixed(1)} NTU</span>
-                      </div>
-                    </div>
-
-                    <div className="mt-1 pt-2 border-t border-white/10 grid grid-cols-3 gap-2 text-center font-['Space_Mono'] text-[11px]">
-                      <div className="bg-black/30 p-1.5 rounded">
-                        <span className="text-[9px] text-[#649c96] block">Body Pressure</span>
-                        <span className="text-[#a3e635] font-bold">{pressureData.body_kpa.toFixed(0)} kPa</span>
-                      </div>
-                      <div className="bg-black/30 p-1.5 rounded">
-                        <span className="text-[9px] text-[#649c96] block">Front Anchor</span>
-                        <span className="text-[#5de6ff] font-bold">{pressureData.front_anchor_kpa.toFixed(0)} kPa</span>
-                      </div>
-                      <div className="bg-black/30 p-1.5 rounded">
-                        <span className="text-[9px] text-[#649c96] block">Rear Anchor</span>
-                        <span className="text-[#ffb4ab] font-bold">{pressureData.rear_anchor_kpa.toFixed(0)} kPa</span>
-                      </div>
-                    </div>
-                  </div>
 
                   {/* Gas Sensor Panel Component (CO2 Local Demo Sensor) */}
                   <div>

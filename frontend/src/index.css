@@ -1,12 +1,11 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
-  font-family:
-    Inter, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
-
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #e8edf5;
   background: #081018;
+  --accent-color: #CCFF80;
 
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -23,18 +22,48 @@ body,
   min-width: 320px;
   min-height: 100%;
   width: 100%;
+  font-family: 'Inter', sans-serif;
 }
 
 body {
   background: #081018;
   color: #e8edf5;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Main Headings use Poppins */
+h1, h2, h3, h4, h5, h6, .font-poppins {
+  font-family: 'Poppins', sans-serif !important;
+}
+
+/* Subtitles, Paragraphs, Labels, and inline elements use Inter */
+p, span, label, sub, sup, .subtitle, .font-inter {
+  font-family: 'Inter', sans-serif;
+}
+
+/* Map font-['Space_Mono'] to Inter font for clean subtitles */
+[class*="font-['Space_Mono']"] {
+  font-family: 'Inter', sans-serif !important;
+}
+
+[class*="font-['Poppins']"] {
+  font-family: 'Poppins', sans-serif !important;
+}
+
+/* Remove harsh neon glow box shadows and drop shadows */
+[class*="shadow-[0_0_"], [class*="shadow-[0_0_12px"], [class*="shadow-[0_0_15px"], [class*="shadow-[0_0_20px"] {
+  box-shadow: none !important;
+}
+
+[class*="drop-shadow-[0_0_"] {
+  filter: none !important;
 }
 
 button,
 input,
 select,
 textarea {
-  font: inherit;
+  font-family: 'Inter', sans-serif;
 }
 
 a {
@@ -68,10 +97,13 @@ a {
   width: 38px;
   height: 38px;
   place-items: center;
-  border: 1px solid #2b3b4a;
+  border: 1px solid rgba(204, 255, 128, 0.4);
   border-radius: 10px;
-  background: #12202d;
+  background: rgba(204, 255, 128, 0.12);
+  color: #CCFF80;
+  font-family: 'Poppins', sans-serif;
   font-weight: 800;
+  font-size: 18px;
 }
 
 .sidebar-brand strong,
@@ -80,13 +112,18 @@ a {
 }
 
 .sidebar-brand strong {
-  font-size: 15px;
+  font-family: 'Poppins', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.01em;
 }
 
 .sidebar-brand span {
-  margin-top: 3px;
+  margin-top: 2px;
   color: #738294;
   font-size: 11px;
+  font-family: 'Inter', sans-serif;
 }
 
 .sidebar-nav {
@@ -96,22 +133,29 @@ a {
 }
 
 .nav-item {
-  padding: 11px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
   border: 1px solid transparent;
   border-radius: 9px;
   color: #8493a3;
   font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 
 .nav-item:hover {
-  background: #111d28;
-  color: #dce5ee;
+  background: rgba(204, 255, 128, 0.08);
+  color: #CCFF80;
 }
 
 .nav-item.active {
-  border-color: #253746;
-  background: #142331;
-  color: #ffffff;
+  border-color: #CCFF80;
+  background: #CCFF80;
+  color: #121f00;
+  font-weight: 700;
 }
 
 .app-main {
@@ -133,11 +177,16 @@ a {
   color: #718092;
   font-size: 10px;
   letter-spacing: 0.16em;
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
 }
 
 .topbar h1 {
   margin: 4px 0 0;
   font-size: 20px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  color: #CCFF80;
 }
 
 .system-status {
@@ -146,13 +195,15 @@ a {
   gap: 8px;
   color: #aab7c5;
   font-size: 12px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
 }
 
 .status-dot {
   width: 8px;
   height: 8px;
   border-radius: 999px;
-  background: #43d17a;
+  background: #CCFF80;
 }
 
 .page-content {

@@ -1,12 +1,20 @@
 import { Link, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  BarChart2,
+  Tv,
+  Compass,
+  ShieldAlert,
+  FileText,
+} from "lucide-react";
 
 const links = [
-  { label: "Dashboard", to: "/dashboard" },
-  { label: "Analytics", to: "/analytics" },
-  { label: "Live Cockpit", to: "/missions/M-104/live" },
-  { label: "Missions", to: "/missions" },
-  { label: "Findings", to: "/findings" },
-  { label: "Reports", to: "/reports" },
+  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Analytics", to: "/analytics", icon: BarChart2 },
+  { label: "Live Cockpit", to: "/missions/M-104/live", icon: Tv },
+  { label: "Missions", to: "/missions", icon: Compass },
+  { label: "Findings", to: "/findings", icon: ShieldAlert },
+  { label: "Reports", to: "/reports", icon: FileText },
 ];
 
 export default function Sidebar() {
@@ -52,6 +60,7 @@ export default function Sidebar() {
       <nav className="sidebar-nav" aria-label="Main Navigation">
         {links.map((link) => {
           const active = isLinkActive(link.to);
+          const Icon = link.icon;
           return (
             <Link
               key={link.to}
@@ -59,7 +68,8 @@ export default function Sidebar() {
               aria-current={active ? "page" : undefined}
               className={active ? "nav-item active" : "nav-item"}
             >
-              {link.label}
+              <Icon className="w-4 h-4 flex-shrink-0" />
+              <span>{link.label}</span>
             </Link>
           );
         })}
