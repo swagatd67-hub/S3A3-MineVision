@@ -40,6 +40,9 @@ from backend.app.services.video.frame_store import (
     FrameMetadata,
     FrameMetadataStore,
 )
+from backend.app.services.video.hardware_ingestion import (
+    HardwareIngestionManager,
+)
 from backend.app.services.video.recording import RecordingManager
 from backend.app.services.video.sewer_classifier import (
     get_sewer_classifier_engine,
@@ -63,6 +66,7 @@ snapshot_store = SnapshotStore()
 recording_manager = RecordingManager()
 pipeline_detector = NullDetector()
 ingestion_gateway = InspectionIngestionGateway()
+hardware_ingestion_manager = HardwareIngestionManager.get_instance()
 
 
 class FrameMetadataRequest(BaseModel):
@@ -538,12 +542,14 @@ def get_live_stream(
         # URL and endpoint shape are deployment configuration; this backend
         # proxies the bytes without assuming a particular ESP32-CAM firmware.
         source = ESP32CAMSource(
-            settings.esp32_cam_url or "",
+            url=settings.esp32_cam_url or "",
+            snapshot_url=settings.esp32_cam_snapshot_url,
             timeout_s=settings.esp32_cam_timeout_s,
         )
         return StreamingResponse(
             esp32cam_mjpeg_proxy(
                 source,
+                fps=fps,
                 fallback_text=f"ESP32-CAM OFFLINE [{camera_id}]",
             ),
             media_type="multipart/x-mixed-replace; boundary=frame",
@@ -973,3 +979,57 @@ def ingest_video_file_endpoint(
         raise HTTPException(
             status_code=500, detail=f"Video ingestion failed: {exc}"
         ) from exc
+
+
+# ============================================================================
+# HARDWARE CAPTURE WORKER ENDPOINTS
+# ============================================================================
+
+
+class HardwareCaptureStartRequest(BaseModel):
+    fps: float = Field(default=2.0, ge=0.5, le=10.0)
+    camera_id: str = Field(default="cam-01", min_length=1, max_length=64)
+
+
+class HardwareCaptureStatusResponse(BaseModel):
+    mission_id: str
+    camera_id: str
+    camera_connected: bool
+    is_ingesting: bool
+    fps: float
+    frame_count: int
+    last_frame_timestamp: str | None = None
+    inference_available: bool
+    last_error: str | None = None
+
+
+@router.post("/missions/{mission_id}/capture/start", status_code=200)
+def start_hardware_capture(
+    mission_id: str,
+    payload: HardwareCaptureStartRequest | None = None,
+) -> HardwareCaptureStatusResponse:
+    """Start background frame ingestion from ESP32-CAM snapshot endpoint into Sewer-ML perception pipeline."""
+    fps = payload.fps if payload else 2.0
+    camera_id = payload.camera_id if payload else "cam-01"
+    status = hardware_ingestion_manager.start_worker(mission_id, camera_id=camera_id, fps=fps)
+    return HardwareCaptureStatusResponse(**status.to_dict())
+
+
+@router.post("/missions/{mission_id}/capture/stop")
+async def stop_hardware_capture(
+    mission_id: str,
+    camera_id: str = Query(default="cam-01"),
+) -> HardwareCaptureStatusResponse:
+    """Stop background frame ingestion worker for a mission."""
+    status = await hardware_ingestion_manager.stop_worker(mission_id, camera_id=camera_id)
+    return HardwareCaptureStatusResponse(**status.to_dict())
+
+
+@router.get("/missions/{mission_id}/capture/status")
+def get_hardware_capture_status(
+    mission_id: str,
+    camera_id: str = Query(default="cam-01"),
+) -> HardwareCaptureStatusResponse:
+    """Query health, frame count, connection, and inference status of hardware ingestion worker."""
+    status = hardware_ingestion_manager.get_status(mission_id, camera_id=camera_id)
+    return HardwareCaptureStatusResponse(**status.to_dict())
