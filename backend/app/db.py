@@ -76,7 +76,14 @@ def init_db() -> None:
             conn.execute(
                 text("ALTER TABLE missions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ;")
             )
+            try:
+                conn.execute(
+                    text("ALTER TABLE telemetry ADD COLUMN IF NOT EXISTS gas JSON;")
+                )
+            except Exception as err:  # noqa: BLE001
+                logger.info("Telemetry gas column check skipped: %s", err)
     except (OperationalError, DatabaseError) as err:
+
         logger.warning("Optional schema check skipped: %s", err)
 
     _db_initialized = True

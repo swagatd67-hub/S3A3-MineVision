@@ -17,15 +17,20 @@ export interface RobotDriveState {
   emergencyStop: boolean;
 }
 
-export interface SensorData {
-  co2Ppm: number;
-  co2BaselinePpm: number;
-  status: 'NORMAL' | 'WARNING' | 'CRITICAL';
-  timestampMs: number;
-  historyPpm: number[];
+export interface GenericGasSensorData {
+  value: number;
+  status: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  timestampMs?: number;
+  history?: number[];
+  // Legacy optional fields for backward compatibility
+  co2Ppm?: number;
+  co2BaselinePpm?: number;
+  historyPpm?: number[];
 }
 
-export type GasSensorData = SensorData;
+export type SensorData = GenericGasSensorData;
+export type GasSensorData = GenericGasSensorData;
+
 
 export interface IMUPoint {
   x: number;

@@ -102,14 +102,14 @@ export default function LiveInspection() {
     emergencyStop: false,
   });
 
-  // Sensor Data (CO2 Local Simulated)
-  const [sensorData] = useState<SensorData>(() => ({
-    co2Ppm: 420,
-    co2BaselinePpm: 400,
+  // Sensor Data (Generic Local Gas Index 0-100)
+  const [sensorData, setSensorData] = useState<SensorData>(() => ({
+    value: 25,
     status: 'NORMAL',
     timestampMs: Date.now(),
-    historyPpm: [410, 412, 415, 418, 419, 422, 420],
+    history: [22, 24, 25, 26, 25, 27, 25],
   }));
+
 
   // IMU Data
   const [imuData, setImuData] = useState<TelemetryIMU | null>({
@@ -394,10 +394,24 @@ export default function LiveInspection() {
 
           setImuData(data.imu ?? null);
 
-
+          if (data.gas) {
+            const gasReading = data.gas;
+            setSensorData((prev) => {
+              const currentHistory = prev.history ?? [];
+              const nextHistory = [...currentHistory.slice(-6), Math.round(gasReading.value)];
+              return {
+                value: gasReading.value,
+                status: gasReading.status,
+                timestampMs: gasReading.timestamp ? Date.parse(gasReading.timestamp) : Date.now(),
+                history: nextHistory,
+              };
+            });
+          }
         }
         lastRenderTime = now;
       }
+
+
       rafIdRef.current = requestAnimationFrame(updateLoop);
     };
 
@@ -730,14 +744,14 @@ export default function LiveInspection() {
 
 
 
-                  {/* Gas Sensor Panel Component (CO2 Local Demo Sensor) */}
+                  {/* Gas Sensor Panel Component */}
                   <div>
                     <div className="text-[10px] font-['Space_Mono'] text-[#649c96] mb-1 px-1 flex justify-between items-center">
                       <span>GAS MONITORING</span>
-                      <span className="text-amber-400/80 font-bold">(LOCAL DEMO SENSOR)</span>
                     </div>
                     <CO2SensorPanel gasData={sensorData} />
                   </div>
+
 
                   {/* IMU Sensor Panel Component */}
                   <MPU6050Panel imuData={imuData} dataIsSimulated={!hasRealTelemetry || runtimeMode === 'SIMULATOR'} />
