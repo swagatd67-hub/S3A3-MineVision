@@ -57,6 +57,8 @@ class Telemetry(Base):
     imu: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     pressure: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     water: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    gas: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
 
 
 class InspectionObservationRow(Base):

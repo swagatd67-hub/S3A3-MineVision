@@ -28,6 +28,15 @@ export interface TelemetryWater {
   turbidity_ntu?: number | null;
 }
 
+export interface TelemetryGas {
+  sensor_id: string;
+  sensor_type: string;
+  value: number;
+  status: 'NORMAL' | 'ELEVATED' | 'HIGH' | 'CRITICAL';
+  timestamp?: string | null;
+  source?: string;
+}
+
 export interface TelemetryData {
   robot_id: string;
   mission_id?: string | null;
@@ -39,7 +48,9 @@ export interface TelemetryData {
   imu?: TelemetryIMU | null;
   pressure?: TelemetryPressure | null;
   water?: TelemetryWater | null;
+  gas?: TelemetryGas | null;
 }
+
 
 export interface TelemetryEvent {
   type: 'telemetry';

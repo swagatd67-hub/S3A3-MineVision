@@ -90,6 +90,12 @@ class Settings(BaseModel):
     esp32_cam_snapshot_url: str | None = Field(default=None)
     esp32_cam_timeout_s: float = Field(default=3.0, gt=0)
 
+    # Gas Sensor Settings
+    gas_sensor_enabled: bool = Field(default=True)
+    gas_sensor_interval_s: float = Field(default=1.0, gt=0)
+    gas_sensor_min: float = Field(default=0.0, ge=0.0)
+    gas_sensor_max: float = Field(default=100.0, le=100.0)
+
     # Resource & Processing Limits
     max_upload_size_bytes: int = Field(default=50 * 1024 * 1024, ge=1024)
     max_batch_image_count: int = Field(default=500, ge=1, le=5000)
@@ -261,6 +267,10 @@ def load_settings_from_env() -> Settings:
         esp32_cam_url=os.getenv("ESP32_CAM_URL") or None,
         esp32_cam_snapshot_url=os.getenv("ESP32_CAM_SNAPSHOT_URL") or None,
         esp32_cam_timeout_s=float(os.getenv("ESP32_CAM_TIMEOUT_S", "3.0")),
+        gas_sensor_enabled=_parse_bool_env(os.getenv("GAS_SENSOR_ENABLED"), True),
+        gas_sensor_interval_s=float(os.getenv("GAS_SENSOR_INTERVAL_S", "1.0")),
+        gas_sensor_min=float(os.getenv("GAS_SENSOR_MIN", "0.0")),
+        gas_sensor_max=float(os.getenv("GAS_SENSOR_MAX", "100.0")),
         max_upload_size_bytes=int(
             os.getenv("MAX_UPLOAD_SIZE_BYTES", str(50 * 1024 * 1024))
         ),

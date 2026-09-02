@@ -27,6 +27,7 @@ from backend.app.db import close_db, init_db
 from backend.app.logging_config import setup_logging
 from backend.app.middleware import CorrelationIdMiddleware
 from backend.app.realtime import telemetry_broadcaster
+from backend.app.services.gas_sensor import gas_sensor_service
 from backend.app.services.robot.manager import robot_manager
 from backend.app.services.video.sewer_classifier import reset_sewer_classifier_engine
 
@@ -44,13 +45,17 @@ async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database and storage initialized successfully.")
 
+    gas_sensor_service.start()
+
     yield
 
     logger.info("Shutting down PipeVision backend resources...")
+    await gas_sensor_service.stop()
     robot_manager.disconnect_all()
     close_db()
     reset_sewer_classifier_engine()
     logger.info("Shutdown complete.")
+
 
 
 settings = get_settings()

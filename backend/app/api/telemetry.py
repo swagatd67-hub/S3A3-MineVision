@@ -9,6 +9,7 @@ from backend.app.db import get_db
 from backend.app.models import Telemetry
 from backend.app.realtime import telemetry_broadcaster
 from backend.app.schemas.telemetry import (
+    GasSensorData,
     IMUData,
     PressureData,
     TelemetryPacket,
@@ -32,6 +33,11 @@ def to_packet(row: Telemetry) -> TelemetryPacket:
         if isinstance(row.water, dict)
         else (row.water if isinstance(row.water, WaterQualityData) else None)
     )
+    gas_obj = (
+        GasSensorData(**row.gas)
+        if isinstance(row.gas, dict)
+        else (row.gas if isinstance(row.gas, GasSensorData) else None)
+    )
     return TelemetryPacket(
         robot_id=row.robot_id,
         mission_id=row.mission_id,
@@ -43,6 +49,7 @@ def to_packet(row: Telemetry) -> TelemetryPacket:
         imu=imu_obj,
         pressure=pressure_obj,
         water=water_obj,
+        gas=gas_obj,
     )
 
 
@@ -64,7 +71,9 @@ async def ingest_telemetry(
         imu=packet.imu.model_dump() if packet.imu else None,
         pressure=packet.pressure.model_dump() if packet.pressure else None,
         water=packet.water.model_dump() if packet.water else None,
+        gas=packet.gas.model_dump() if packet.gas else None,
     )
+
 
     db.add(row)
     db.commit()
