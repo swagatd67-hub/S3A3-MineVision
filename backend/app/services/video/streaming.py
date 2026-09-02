@@ -17,25 +17,57 @@ logger = logging.getLogger(__name__)
 
 async def esp32cam_mjpeg_proxy(
     source: ESP32CAMSource,
+    fps: float = 8.0,
     fallback_text: str = "ESP32-CAM OFFLINE",
 ) -> AsyncGenerator[bytes, None]:
-    """Proxy configured camera bytes without interpreting firmware endpoints."""
-    sent_data = False
-    try:
-        iterator = source.mjpeg_chunks()
-        while True:
-            chunk = await asyncio.to_thread(next, iterator, None)
-            if chunk is None:
-                break
-            sent_data = True
-            yield chunk
-    except (asyncio.CancelledError, GeneratorExit):
-        raise
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("ESP32-CAM proxy stopped: %s", exc)
-    finally:
-        source.close()
+    """Proxy configured camera bytes or generate an MJPEG stream from repeated snapshot fetches.
 
+    Gracefully falls back to snapshot polling if direct stream connection fails or times out,
+    and falls back to a synthetic placeholder if hardware is completely unreachable.
+    """
+    sent_data = False
+    safe_fps = min(max(fps, 1.0), 30.0)
+    delay = 1.0 / safe_fps
+
+    # 1. Attempt direct stream chunks if url is configured
+    if source.url:
+        try:
+            iterator = source.mjpeg_chunks()
+            while True:
+                chunk = await asyncio.to_thread(next, iterator, None)
+                if chunk is None:
+                    break
+                sent_data = True
+                yield chunk
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "ESP32-CAM stream proxy stopped/failed: %s. Attempting snapshot fallback...",
+                exc,
+            )
+        finally:
+            source.close()
+
+    # 2. If direct streaming did not yield chunks, poll snapshot endpoint at target FPS
+    if not sent_data:
+        try:
+            while True:
+                jpeg_bytes = await asyncio.to_thread(source.fetch_snapshot)
+                if jpeg_bytes is None:
+                    break
+                sent_data = True
+                yield (
+                    b"--frame\r\n"
+                    b"Content-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"
+                )
+                await asyncio.sleep(delay)
+        except (asyncio.CancelledError, GeneratorExit):
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ESP32-CAM snapshot polling generator error: %s", exc)
+
+    # 3. Fall back to synthetic placeholder if hardware is completely offline
     if not sent_data:
         jpeg_bytes = generate_placeholder_jpeg(fallback_text)
         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg_bytes + b"\r\n"

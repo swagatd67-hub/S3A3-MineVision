@@ -87,6 +87,7 @@ class Settings(BaseModel):
     # Video source selection. Simulator is deliberately the safe default.
     camera_source_type: CameraSourceType = Field(default="simulator")
     esp32_cam_url: str | None = Field(default=None)
+    esp32_cam_snapshot_url: str | None = Field(default=None)
     esp32_cam_timeout_s: float = Field(default=3.0, gt=0)
 
     # Resource & Processing Limits
@@ -117,13 +118,18 @@ class Settings(BaseModel):
             )
 
         if self.camera_source_type == "esp32cam":
-            if not self.esp32_cam_url:
+            if not self.esp32_cam_url and not self.esp32_cam_snapshot_url:
                 raise ConfigurationError(
-                    "ESP32_CAM_URL must be configured when CAMERA_SOURCE_TYPE=esp32cam."
+                    "Either ESP32_CAM_URL or ESP32_CAM_SNAPSHOT_URL must be configured when CAMERA_SOURCE_TYPE=esp32cam."
                 )
-            parsed_url = urlparse(self.esp32_cam_url)
-            if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
-                raise ConfigurationError("ESP32_CAM_URL must be a valid HTTP(S) URL.")
+            for target_url, name in [
+                (self.esp32_cam_url, "ESP32_CAM_URL"),
+                (self.esp32_cam_snapshot_url, "ESP32_CAM_SNAPSHOT_URL"),
+            ]:
+                if target_url:
+                    parsed_url = urlparse(target_url)
+                    if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
+                        raise ConfigurationError(f"{name} must be a valid HTTP(S) URL.")
 
         if self.is_production:
             if self.debug:
@@ -249,8 +255,11 @@ def load_settings_from_env() -> Settings:
         robot_mpu6050_i2c_address=int(os.getenv("ROBOT_MPU6050_I2C_ADDRESS", "104"), 0),
         robot_mpu6050_accelerometer_scale_g=int(os.getenv("ROBOT_MPU6050_ACCELEROMETER_SCALE_G", "2")),
         robot_mpu6050_gyroscope_scale_dps=int(os.getenv("ROBOT_MPU6050_GYROSCOPE_SCALE_DPS", "250")),
-        camera_source_type=os.getenv("CAMERA_SOURCE_TYPE", "simulator").lower(),
-        esp32_cam_url=os.getenv("ESP32_CAM_URL"),
+        camera_source_type="esp32cam"
+        if (os.getenv("CAMERA_SOURCE_TYPE") or "simulator").lower().strip() == "esp32cam"
+        else "simulator",
+        esp32_cam_url=os.getenv("ESP32_CAM_URL") or None,
+        esp32_cam_snapshot_url=os.getenv("ESP32_CAM_SNAPSHOT_URL") or None,
         esp32_cam_timeout_s=float(os.getenv("ESP32_CAM_TIMEOUT_S", "3.0")),
         max_upload_size_bytes=int(
             os.getenv("MAX_UPLOAD_SIZE_BYTES", str(50 * 1024 * 1024))

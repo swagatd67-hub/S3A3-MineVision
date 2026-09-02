@@ -28,25 +28,61 @@ class CameraSource(Protocol):
 
 
 class ESP32CAMSource:
-    """Proxy a configurable ESP32-CAM HTTP/MJPEG stream over the local network.
+    """Proxy a configurable ESP32-CAM HTTP/MJPEG stream or snapshot feed over the local network.
 
-    The firmware endpoint is intentionally not assumed. ``url`` must be
-    supplied by deployment configuration and is opened only when streaming.
+    The firmware endpoint is intentionally not assumed. ``url`` and/or ``snapshot_url``
+    must be supplied by deployment configuration and accessed only when streaming.
     """
 
-    def __init__(self, url: str, timeout_s: float = 3.0) -> None:
-        if not url or not url.strip():
-            raise ValueError("ESP32-CAM stream URL must be configured.")
-        if not url.startswith(("http://", "https://")):
+    def __init__(
+        self,
+        url: str = "",
+        snapshot_url: str | None = None,
+        timeout_s: float = 3.0,
+    ) -> None:
+        effective_url = url or snapshot_url or ""
+        if not effective_url or not effective_url.strip():
+            raise ValueError("ESP32-CAM URL or snapshot URL must be configured.")
+        if url and not url.startswith(("http://", "https://")):
             raise ValueError("ESP32-CAM stream URL must use http:// or https://.")
+        if snapshot_url and not snapshot_url.startswith(("http://", "https://")):
+            raise ValueError("ESP32-CAM snapshot URL must use http:// or https://.")
         if timeout_s <= 0:
             raise ValueError("ESP32-CAM timeout must be positive.")
         self.url = url
+        self.snapshot_url = snapshot_url
         self.timeout_s = timeout_s
         self._response = None
 
+    def fetch_snapshot(self) -> bytes | None:
+        """Fetch a single JPEG frame snapshot from snapshot_url (or url as fallback)."""
+        target_url = self.snapshot_url or self.url
+        if not target_url:
+            return None
+        request = Request(
+            target_url,
+            headers={
+                "User-Agent": "PipeVision/1.0",
+                "Accept": "image/jpeg",
+                "Connection": "close",
+            },
+        )
+        try:
+            with urlopen(request, timeout=self.timeout_s) as response:
+                data = response.read()
+                if data:
+                    return data
+        except (OSError, URLError) as exc:
+            logger.warning("ESP32-CAM snapshot fetch failed at %s: %s", target_url, exc)
+        return None
+
     def mjpeg_chunks(self) -> Iterator[bytes]:
-        request = Request(self.url, headers={"Accept": "multipart/x-mixed-replace, image/jpeg"})
+        if not self.url:
+            return
+        request = Request(
+            self.url,
+            headers={"Accept": "multipart/x-mixed-replace, image/jpeg"},
+        )
         try:
             self._response = urlopen(request, timeout=self.timeout_s)
             while True:
