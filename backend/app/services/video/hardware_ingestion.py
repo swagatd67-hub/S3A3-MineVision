@@ -235,9 +235,11 @@ class HardwareIngestionManager:
         source: ESP32CAMSource | None = None
         if settings.camera_source_type == "esp32cam":
             try:
+                url = settings.esp32_cam_url or "http://127.0.0.1:8000/stream"
+                snapshot_url = settings.esp32_cam_snapshot_url or "http://127.0.0.1:8000/capture"
                 source = ESP32CAMSource(
-                    url=settings.esp32_cam_url or "",
-                    snapshot_url=settings.esp32_cam_snapshot_url,
+                    url=url,
+                    snapshot_url=snapshot_url,
                     timeout_s=settings.esp32_cam_timeout_s,
                 )
             except ValueError as exc:

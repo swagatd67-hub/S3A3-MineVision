@@ -27,11 +27,14 @@ def generate_valid_test_jpeg() -> bytes:
 
 @pytest.fixture(autouse=True)
 async def reset_hardware_manager(monkeypatch: pytest.MonkeyPatch):
-    from backend.app.config import get_settings
-    settings = get_settings()
-    monkeypatch.setattr(settings, "camera_source_type", "esp32cam")
-    monkeypatch.setattr(settings, "esp32_cam_url", "http://192.168.137.180:81/stream")
-    monkeypatch.setattr(settings, "esp32_cam_snapshot_url", "http://192.168.137.180/capture")
+    from backend.app.config import Settings
+    mock_settings = Settings(
+        camera_source_type="esp32cam",
+        esp32_cam_url="http://192.168.137.180:81/stream",
+        esp32_cam_snapshot_url="http://192.168.137.180/capture",
+    )
+    monkeypatch.setattr("backend.app.services.video.hardware_ingestion.get_settings", lambda: mock_settings)
+    monkeypatch.setattr("backend.app.config.get_settings", lambda: mock_settings)
     await HardwareIngestionManager.reset_instance_async()
     yield
     await HardwareIngestionManager.reset_instance_async()
