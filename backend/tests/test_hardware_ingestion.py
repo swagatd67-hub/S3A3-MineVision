@@ -92,7 +92,11 @@ async def test_hardware_ingestion_esp32_disconnect_handled(monkeypatch: pytest.M
     monkeypatch.setattr(ESP32CAMSource, "fetch_snapshot", lambda _self: None)
 
     manager.start_worker("M-TEST-04", camera_id="cam-01", fps=50.0)
-    await asyncio.sleep(0.05)
+    for _ in range(10):
+        await asyncio.sleep(0.05)
+        status = manager.get_status("M-TEST-04", camera_id="cam-01")
+        if status.last_error is not None:
+            break
 
     status = manager.get_status("M-TEST-04", camera_id="cam-01")
     assert status.camera_connected is False
