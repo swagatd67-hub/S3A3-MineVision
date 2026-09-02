@@ -74,11 +74,35 @@ class HardwareIngestionManager:
 
     @classmethod
     def reset_instance(cls) -> None:
-        """Reset singleton for testing."""
+        """Reset singleton synchronously for testing."""
         if cls._instance is not None:
             for worker in list(cls._instance._workers.values()):
-                if worker.get("is_ingesting") and worker.get("stop_event"):
+                if worker.get("stop_event"):
                     worker["stop_event"].set()
+                task: asyncio.Task | None = worker.get("task")
+                if task and not task.done():
+                    task.cancel()
+                worker["is_ingesting"] = False
+                worker["camera_connected"] = False
+            cls._instance._workers.clear()
+            cls._instance = None
+
+    @classmethod
+    async def reset_instance_async(cls) -> None:
+        """Reset singleton and await cancellation of all running background tasks for testing."""
+        if cls._instance is not None:
+            tasks_to_await: list[asyncio.Task] = []
+            for worker in list(cls._instance._workers.values()):
+                if worker.get("stop_event"):
+                    worker["stop_event"].set()
+                task: asyncio.Task | None = worker.get("task")
+                if task and not task.done():
+                    task.cancel()
+                    tasks_to_await.append(task)
+                worker["is_ingesting"] = False
+                worker["camera_connected"] = False
+            if tasks_to_await:
+                await asyncio.gather(*tasks_to_await, return_exceptions=True)
             cls._instance._workers.clear()
             cls._instance = None
 
@@ -121,11 +145,15 @@ class HardwareIngestionManager:
     ) -> IngestionWorkerStatus:
         key = f"{mission_id}:{camera_id}"
         existing = self._workers.get(key)
-        if existing and existing["is_ingesting"]:
-            logger.info("Ingestion worker already active for mission '%s' camera '%s'", mission_id, camera_id)
-            return self.get_status(mission_id, camera_id)
+        if existing:
+            task: asyncio.Task | None = existing.get("task")
+            if existing.get("is_ingesting") and task and not task.done():
+                logger.info("Ingestion worker already active for mission '%s' camera '%s'", mission_id, camera_id)
+                return self.get_status(mission_id, camera_id)
+            # Remove stale/inactive worker
+            self._workers.pop(key, None)
 
-        safe_fps = min(max(fps, 0.5), 10.0)
+        safe_fps = min(max(fps, 0.1), 60.0)
         stop_event = asyncio.Event()
         checkpoint_exists = get_default_checkpoint_path().exists()
 
@@ -160,9 +188,11 @@ class HardwareIngestionManager:
     async def stop_worker(self, mission_id: str, camera_id: str = "cam-01") -> IngestionWorkerStatus:
         key = f"{mission_id}:{camera_id}"
         worker = self._workers.get(key)
-        if worker is None or not worker["is_ingesting"]:
+        if worker is None:
             return self.get_status(mission_id, camera_id)
 
+        worker["is_ingesting"] = False
+        worker["camera_connected"] = False
         worker["stop_event"].set()
         task: asyncio.Task | None = worker.get("task")
         if task and not task.done():
@@ -172,9 +202,10 @@ class HardwareIngestionManager:
             except (asyncio.CancelledError, Exception) as exc:  # noqa: BLE001
                 logger.debug("Task cancellation exception handled: %s", exc)
 
-        worker["is_ingesting"] = False
+        status = self.get_status(mission_id, camera_id)
+        self._workers.pop(key, None)
         logger.info("Stopped ESP32-CAM hardware ingestion worker for mission '%s'", mission_id)
-        return self.get_status(mission_id, camera_id)
+        return status
 
     @staticmethod
     def _do_ingest_frame(

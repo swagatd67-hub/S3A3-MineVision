@@ -26,10 +26,15 @@ def generate_valid_test_jpeg() -> bytes:
 
 
 @pytest.fixture(autouse=True)
-def reset_hardware_manager():
-    HardwareIngestionManager.reset_instance()
+async def reset_hardware_manager(monkeypatch: pytest.MonkeyPatch):
+    from backend.app.config import get_settings
+    settings = get_settings()
+    monkeypatch.setattr(settings, "camera_source_type", "esp32cam")
+    monkeypatch.setattr(settings, "esp32_cam_url", "http://192.168.137.180:81/stream")
+    monkeypatch.setattr(settings, "esp32_cam_snapshot_url", "http://192.168.137.180/capture")
+    await HardwareIngestionManager.reset_instance_async()
     yield
-    HardwareIngestionManager.reset_instance()
+    await HardwareIngestionManager.reset_instance_async()
 
 
 @pytest.mark.anyio
@@ -93,7 +98,8 @@ async def test_hardware_ingestion_esp32_disconnect_handled(monkeypatch: pytest.M
     await manager.stop_worker("M-TEST-04", camera_id="cam-01")
 
 
-def test_hardware_ingestion_api_endpoints(monkeypatch: pytest.MonkeyPatch):
+@pytest.mark.anyio
+async def test_hardware_ingestion_api_endpoints(monkeypatch: pytest.MonkeyPatch):
     test_jpeg = generate_valid_test_jpeg()
     monkeypatch.setattr(ESP32CAMSource, "fetch_snapshot", lambda _self: test_jpeg)
 
