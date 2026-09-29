@@ -193,3 +193,48 @@ export interface MissionSnapshot {
   progress: MissionProgressMetrics;
   digital_twin: DigitalTwinState | null;
 }
+
+export interface ReconstructionDefect {
+  id: string;
+  class_code: string;
+  distance_m: number;
+  clock_position: string;
+  clock_angle_deg: number;
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  confidence: number;
+  frame_index?: number | null;
+  box?: BoundingBox | Record<string, number> | null;
+}
+
+export interface ReconstructionSection {
+  section_index: number;
+  start_distance_m: number;
+  end_distance_m: number;
+  status: 'PENDING' | 'RECONSTRUCTED' | 'ANOMALOUS';
+  outer_radius_mm: number;
+  inner_radius_mm: number;
+  defect_count: number;
+}
+
+export interface CenterlinePoint {
+  x: number;
+  y: number;
+  z: number;
+}
+
+export interface Reconstruction3DOutput {
+  mission_id: string;
+  robot_id: string;
+  status: string;
+  total_length_m: number;
+  reconstructed_length_m: number;
+  progress_percent: number;
+  diameter_mm: number;
+  section_count: number;
+  sections: ReconstructionSection[];
+  centerline: CenterlinePoint[];
+  defects: ReconstructionDefect[];
+  generated_at: string;
+  version: string;
+}
+

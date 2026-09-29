@@ -55,3 +55,25 @@ export async function getMissionSnapshot(
     throw new DigitalTwinApiError(message, 'SNAPSHOT_FETCH_FAILED', missionId);
   }
 }
+
+/**
+ * Fetches the 3D Pipe Reconstruction model for a given mission.
+ * API Endpoint: GET /api/v1/missions/{mission_id}/reconstruction3d
+ */
+export async function getMission3DReconstruction(
+  missionId: string
+): Promise<import('../types/digitalTwin').Reconstruction3DOutput> {
+  try {
+    const response = await api.get<import('../types/digitalTwin').Reconstruction3DOutput>(
+      `/api/v1/missions/${encodeURIComponent(missionId)}/reconstruction3d`
+    );
+    return response.data;
+  } catch (err) {
+    const message = extractErrorMessage(
+      err,
+      `Failed to fetch 3D reconstruction for mission '${missionId}'.`
+    );
+    throw new DigitalTwinApiError(message, 'RECONSTRUCTION_3D_FETCH_FAILED', missionId);
+  }
+}
+

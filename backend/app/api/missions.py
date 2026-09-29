@@ -163,6 +163,19 @@ def get_mission_digital_twin(mission_id: str, db: DatabaseSession) -> dict:
         ) from err
 
 
+@router.get("/{mission_id}/reconstruction3d")
+def get_mission_3d_reconstruction(mission_id: str, db: DatabaseSession) -> dict:
+    from backend.app.services.reconstruction_3d import generate_3d_reconstruction
+    try:
+        reconstruction = generate_3d_reconstruction(db, mission_id)
+        return reconstruction.model_dump(mode="json")
+    except MissionNotFoundError as err:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Mission not found"
+        ) from err
+
+
+
 @router.get("/{mission_id}/observations")
 def get_mission_observations(mission_id: str, db: DatabaseSession) -> dict:
     mission = db.get(Mission, mission_id)

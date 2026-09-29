@@ -6,23 +6,23 @@ import {
   Box,
   FileText,
   Play,
-  RotateCcw,
   ShieldAlert,
-  ZoomIn,
-  ZoomOut,
   RefreshCw,
   AlertOctagon,
   Activity,
   Layers,
 } from 'lucide-react';
 import { getMission } from '../api/missions';
-import { getMissionDigitalTwin, getMissionSnapshot } from '../api/digitalTwin';
+import { getMissionDigitalTwin, getMissionSnapshot, getMission3DReconstruction } from '../api/digitalTwin';
 import { getMissionObservations } from '../api/findings';
+import ThreeDPipeViewer from '../components/ThreeDPipeViewer';
 import type { Mission } from '../types/mission';
 import type {
   DigitalTwinState,
   MapObservation,
   MissionSnapshot,
+  Reconstruction3DOutput,
+  ReconstructionDefect,
 } from '../types/digitalTwin';
 
 /**
@@ -60,6 +60,7 @@ export default function MissionDetail() {
   const [mission, setMission] = useState<Mission | null>(null);
   const [snapshot, setSnapshot] = useState<MissionSnapshot | null>(null);
   const [digitalTwin, setDigitalTwin] = useState<DigitalTwinState | null>(null);
+  const [reconstruction, setReconstruction] = useState<Reconstruction3DOutput | null>(null);
   const [fallbackObservations, setFallbackObservations] = useState<MapObservation[]>([]);
   const [selectedObservation, setSelectedObservation] = useState<MapObservation | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -67,7 +68,6 @@ export default function MissionDetail() {
   const [reloadTrigger, setReloadTrigger] = useState<number>(0);
 
   // 3D Digital Twin Viewer controls
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
   const [isWireframe, setIsWireframe] = useState<boolean>(false);
 
   useEffect(() => {
@@ -78,8 +78,9 @@ export default function MissionDetail() {
       getMissionSnapshot(missionId),
       getMissionDigitalTwin(missionId),
       getMissionObservations(missionId),
+      getMission3DReconstruction(missionId),
     ])
-      .then(([missionRes, snapshotRes, twinRes, obsRes]) => {
+      .then(([missionRes, snapshotRes, twinRes, obsRes, reconRes]) => {
         if (!isMounted) return;
 
         let hasData = false;
@@ -102,6 +103,11 @@ export default function MissionDetail() {
           if (twinObs.length > 0) {
             loadedObs = twinObs;
           }
+        }
+
+        if (reconRes.status === 'fulfilled') {
+          setReconstruction(reconRes.value);
+          hasData = true;
         }
 
         if (obsRes.status === 'fulfilled' && obsRes.value?.observations) {
@@ -306,136 +312,28 @@ export default function MissionDetail() {
               </div>
             </div>
 
-            {/* Interactive SVG Pipe Spatial Map Container */}
-            <div className="w-full h-[380px] bg-[#050e0f] rounded-lg border border-[#173838] relative overflow-hidden flex items-center justify-center p-6">
-              {observations.length === 0 && !loading && (
-                <div className="absolute z-20 top-4 left-1/2 -translate-x-1/2 bg-[#0a1617]/90 border border-amber-500/40 rounded-lg px-4 py-2 text-amber-300 text-xs font-['Space_Mono'] flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  <span>No spatial observations registered for this mission yet.</span>
-                </div>
-              )}
+            {/* Interactive 3D WebGL Pipe Reconstruction Canvas Container */}
+            <ThreeDPipeViewer
+              reconstruction={reconstruction}
+              selectedDefectId={selectedObservation?.observation_id}
+              onSelectDefect={(defect: ReconstructionDefect) => {
+                const match = observations.find((o) => o.observation_id === defect.id);
+                if (match) {
+                  setSelectedObservation(match);
+                } else {
+                  setSelectedObservation({
+                    observation_id: defect.id,
+                    frame_index: defect.frame_index || 0,
+                    class_code: defect.class_code,
+                    confidence: defect.confidence,
+                    distance_m: defect.distance_m,
+                    box: defect.box as MapObservation['box'],
+                  });
+                }
+              }}
+              isWireframe={isWireframe}
+            />
 
-              <svg
-                className="w-full h-full"
-                viewBox="0 0 600 300"
-                style={{ transform: `scale(${zoomLevel})`, transition: 'transform 0.3s ease' }}
-              >
-                <defs>
-                  <linearGradient id="pipeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#0c2324" />
-                    <stop offset="50%" stopColor="#19484a" />
-                    <stop offset="100%" stopColor="#0c2324" />
-                  </linearGradient>
-                </defs>
-
-                {/* Outer Pipe Cylinder */}
-                <rect
-                  x="50"
-                  y="80"
-                  width="500"
-                  height="140"
-                  rx="15"
-                  fill="url(#pipeGrad)"
-                  stroke={isWireframe ? '#5de6ff' : '#1e4b4d'}
-                  strokeWidth={isWireframe ? '1' : '3'}
-                  strokeDasharray={isWireframe ? '4 2' : 'none'}
-                />
-
-                {/* Internal Pipe Mesh Rings */}
-                {[100, 180, 260, 340, 420, 500].map((xPos) => (
-                  <ellipse
-                    key={xPos}
-                    cx={xPos}
-                    cy="150"
-                    rx="15"
-                    ry="70"
-                    fill="none"
-                    stroke={isWireframe ? '#5de6ff' : '#173838'}
-                    strokeWidth="1.5"
-                    strokeDasharray="2 2"
-                  />
-                ))}
-
-                {/* Central Axis Chainage Line */}
-                <line x1="50" y1="150" x2="550" y2="150" stroke="#a3e635" strokeWidth="1" strokeDasharray="5 3" />
-
-                {/* Real Defect Markers from Digital Twin Map Observations */}
-                {observations.map((obs) => {
-                  const obsDistances = observations.map((o) => o.distance_m || 0);
-                  const maxObsDist = obsDistances.length > 0 ? Math.max(...obsDistances) : 50;
-                  const maxDist =
-                    totalInspectedDistance && totalInspectedDistance > 0
-                      ? totalInspectedDistance
-                      : Math.max(maxObsDist * 1.15, 10);
-                  const ratio = Math.min(Math.max(obs.distance_m / maxDist, 0.0), 1.0);
-                  const xPos = 50 + ratio * 500;
-
-                  const { normU } = deriveClockPosition(obs);
-                  // Map normU (0..1) to vertical offset within cylinder (y: 80..220)
-                  const yPos = 150 + Math.sin(normU * 2 * Math.PI) * 45;
-
-                  const isSelected = selectedObservation?.observation_id === obs.observation_id;
-                  const isHighConf = obs.confidence > 0.8;
-
-                  return (
-                    <g
-                      key={obs.observation_id}
-                      onClick={() => setSelectedObservation(obs)}
-                      className="cursor-pointer group"
-                    >
-                      <circle
-                        cx={xPos}
-                        cy={yPos}
-                        r={isSelected ? '9' : '6'}
-                        fill={isHighConf ? '#ff5449' : '#ffb4ab'}
-                        className="transition-all"
-                      >
-                        {isSelected && (
-                          <animate attributeName="r" values="9;12;9" dur="1.5s" repeatCount="indefinite" />
-                        )}
-                      </circle>
-
-                      <text
-                        x={xPos}
-                        y={yPos - 12}
-                        fill="#ffffff"
-                        fontSize="10"
-                        fontFamily="Space Mono"
-                        textAnchor="middle"
-                        className="font-bold drop-shadow"
-                      >
-                        {obs.class_code.toUpperCase()} ({obs.distance_m.toFixed(1)}m)
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Zoom Floating Controls */}
-              <div className="absolute bottom-4 left-4 bg-[#0a1617]/90 border border-[#1e4848] p-1.5 rounded-lg flex items-center gap-1">
-                <button
-                  onClick={() => setZoomLevel((z) => Math.min(z + 0.2, 1.8))}
-                  className="p-1.5 text-[#649c96] hover:text-white hover:bg-white/10 rounded cursor-pointer"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </button>
-                <span className="text-xs font-['Space_Mono'] text-white px-2">
-                  {Math.round(zoomLevel * 100)}%
-                </span>
-                <button
-                  onClick={() => setZoomLevel((z) => Math.max(z - 0.2, 0.6))}
-                  className="p-1.5 text-[#649c96] hover:text-white hover:bg-white/10 rounded cursor-pointer"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setZoomLevel(1)}
-                  className="p-1.5 text-[#649c96] hover:text-white hover:bg-white/10 rounded cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Selected Anomaly / Inspector Card */}
